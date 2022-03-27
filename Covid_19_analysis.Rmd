@@ -1,0 +1,138 @@
+---
+title: "COVID-19 Dataset Analysis"
+output: html_notebook
+---
+
+```{r, echo = FALSE}
+library(tidyverse)
+library(scales)
+library(plotly)
+library(DT)
+library(data.table)
+library(gtable)
+library(plotly)
+library(lubridate)
+```
+
+```{r, echo = FALSE}
+covid <- read_csv("data/owid-covid-data.csv")
+variants <- read_csv("data/covid-variants.csv")
+```
+
+```{r}
+nrow(covid)
+```
+
+```{r}
+covid$location %>% 
+  unique()
+```
+
+```{r}
+covid_NAs <- covid %>% 
+  group_by(location) %>% 
+  summarise_all(funs(sum(is.na(.)))) %>% 
+  pivot_longer(cols = -location, names_to = "Variable", values_to = "NAs") %>% 
+  mutate(Percent = round(NAs / nrow(covid) * 100 ,2)) %>% 
+  arrange(-NAs)
+
+covid_NAs
+```
+
+```{r}
+DT::datatable(
+  covid_NAs, filter = 'top',
+  #options = list(
+ #   columnDefs = list(list(targets = 1, searchable = FALSE))
+  #)
+)
+```
+
+```{r}
+covid_NAs %>% 
+  group_by(location) %>% 
+  summarise(total_pct_na = sum(Percent)) %>% 
+  arrange(total_pct_na) %>% 
+  datatable(filter = 'top')
+```
+
+```{r}
+covid %>% 
+  colnames()
+```
+
+```{r}
+head(covid$date)
+```
+
+```{r}
+summary(variants)
+```
+
+```{r}
+variants %>%
+  filter(location == "United States") %>% 
+ ## filter(variant %in% c("Alpha", "Delta", "Omicron")) %>%  
+  ggplot(aes(x = date, y = perc_sequences, color = variant)) + 
+  geom_line(size = 1, alpha = 0.5) + 
+  theme_minimal()
+```
+
+```{r}
+variants %>% 
+  filter(location == "United States", date == max(date)) %>% 
+  arrange(-perc_sequences)
+```
+
+
+```{r}
+variants$date
+```
+
+
+ 
+```{r}
+us <- covid %>% 
+  filter(location == "United States") 
+
+us_variants <- variants %>% 
+  filter(location == "United States")
+
+us <- left_join(us, us_variants, by = "date")
+```
+
+```{r}
+variants_plot <- us %>% 
+  ggplot(aes(x = date)) +
+  geom_line(aes(y = perc_sequences, color = variant), show.legend = FALSE) +
+  geom_vline(aes(xintercept = ymd(20200706)), color = "black") +
+  geom_vline(aes(xintercept = ymd(20210517)), color = "black") + 
+  geom_vline(aes(xintercept = ymd(20211004)), color = "black") + 
+    geom_vline(aes(xintercept = ymd(20220105)), color = "black") + 
+  theme_minimal()
+
+cases_plot <- us %>% 
+  ggplot(aes(x = date)) +
+  geom_line(aes(y = new_cases_per_million), show.legend = FALSE) +
+  geom_line(aes(y = new_deaths_per_million)) + 
+  geom_vline(aes(xintercept = ymd(20200706)), color = "black") +
+  geom_vline(aes(xintercept = ymd(20210517)), color = "black") + 
+  geom_vline(aes(xintercept = ymd(20211004)), color = "black") + 
+    geom_vline(aes(xintercept = ymd(20220105)), color = "black") + 
+  theme_minimal()
+```
+
+```{r}
+ggplotly(variants_plot)
+```
+
+```{r}
+variants_plot
+```
+
+```{r}
+cases_plot
+```
+
+
+
