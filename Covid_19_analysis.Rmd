@@ -120,6 +120,15 @@ cases_plot <- us %>%
   geom_vline(aes(xintercept = ymd(20211004)), color = "black") + 
     geom_vline(aes(xintercept = ymd(20220105)), color = "black") + 
   theme_minimal()
+
+deaths_plot <- us %>% 
+  ggplot(aes(x = date)) +
+  geom_line(aes(y = new_deaths_per_million)) + 
+  geom_vline(aes(xintercept = ymd(20200706)), color = "black") +
+  geom_vline(aes(xintercept = ymd(20210517)), color = "black") + 
+  geom_vline(aes(xintercept = ymd(20211004)), color = "black") + 
+    geom_vline(aes(xintercept = ymd(20220105)), color = "black") + 
+  theme_minimal()
 ```
 
 ```{r}
@@ -134,5 +143,18 @@ variants_plot
 cases_plot
 ```
 
+```{r}
+deaths_plot
+```
 
+```{r}
+us %>% 
+  ggplot(aes(x = date)) +
+  geom_line(aes(y = people_vaccinated_per_hundred)) +
+    geom_vline(aes(xintercept = ymd(20200706)), color = "black") +
+  geom_vline(aes(xintercept = ymd(20210517)), color = "black") + 
+  geom_vline(aes(xintercept = ymd(20211004)), color = "black") + 
+    geom_vline(aes(xintercept = ymd(20220105)), color = "black") + 
+  theme_minimal()
+```
 
