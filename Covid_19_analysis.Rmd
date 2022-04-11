@@ -1,9 +1,13 @@
 ---
-title: "COVID-19 Dataset Analysis"
+title: "COVID-19 Variants Analysis"
 output: html_notebook
 ---
 
-```{r, echo = FALSE, message=FALSE, warning=FALSE}
+```{r, include = FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE)
+```
+
+```{r, echo = FALSE, message=FALSE, warning=FALSE, comment=FALSE}
 library(tidyverse)
 library(scales)
 library(plotly)
@@ -14,31 +18,29 @@ library(plotly)
 library(lubridate)
 library(vtable)
 library(rjson)
+library(timetk)
+library(Rssa)
 ```
 
-```{r, echo = FALSE}
+```{r, echo = FALSE, warning=FALSE}
 covid <- read_csv("data/owid-covid-data.csv",show_col_types = FALSE)
-variants <- read_csv("data/covid-variants.csv",show_col_types = FALSE)
+#variants <- read_csv("data/covid-variants.csv",show_col_types = FALSE)
+
+gisaid <- as.data.frame(fread("data/gisaid_variants_statistics.tsv")) %>% 
+  rename(date = `Week prior to`,
+         count = `Submission Count`,
+         perc_sequences = `% per Country and Week`,
+         total = `Total per Country and Week`,
+         variant = Value) %>% 
+  mutate(date = ymd(date),
+         perc_sequences = round(count / total * 100, 3))# %>% 
+#  separate(variant, into = c("variant", "origin"), sep = c("first detected in "))
+
+gisaid_variants <- gisaid %>% 
+  filter(Type == "Variant") %>%
+  separate(variant, c("variant", "origin"), sep = "first detected in ") %>% 
+  select(-Type)
 ```
-
-```{r}
-USAClusters <- fromJSON(file = "data/USAClusters_data.json")
-USAClusters <- USAClusters$countries$USA
-USAClusters <- as.data.frame(USAClusters) %>% 
-  mutate(week = ymd(week)) %>% 
-  arrange(week) %>% 
-  pivot_longer(cols = -c(week, total_sequences), names_to = "variant", values_to = "sequences") %>% 
-  mutate(perc_sequences = round(sequences / total_sequences * 100, 2)) %>% 
-  rename(date = week)
-
-USAClusters
-```
-
-
-```{r}
-sumtable(covid)
-```
-
 
 ```{r}
 covid_NAs <- covid %>% 
@@ -47,17 +49,6 @@ covid_NAs <- covid %>%
   pivot_longer(cols = -location, names_to = "Variable", values_to = "NAs") %>% 
   mutate(Percent = round(NAs / nrow(covid) * 100 ,2)) %>% 
   arrange(-NAs)
-
-covid_NAs
-```
-
-```{r}
-DT::datatable(
-  covid_NAs, filter = 'top',
-  #options = list(
- #   columnDefs = list(list(targets = 1, searchable = FALSE))
-  #)
-)
 ```
 
 ```{r}
@@ -69,96 +60,203 @@ covid_NAs %>%
 ```
 
 ```{r}
-covid %>% 
-  colnames()
+#Helper function for filtering data
+my_data <- function(country_covid_filter, country_gisaid_filter){
+  data <- covid %>% 
+    filter(location == country_covid_filter)
+  gisaid_data <- gisaid_variants %>% 
+    filter(Country == country_gisaid_filter)
+  data <- left_join(data, gisaid_data, by = "date")
+  data
+}
+
+us <- my_data("United States", "USA")
 ```
 
-```{r}
-head(covid$date)
-```
- 
-```{r}
-us <- covid %>% 
-  filter(location == "United States") 
 
-us <- left_join(us, USAClusters, by = "date")
-```
-
-```{r}
-variants_plot <- us %>% 
-  ggplot(aes(x = date)) +
-  geom_line(aes(y = perc_sequences, color = variant), show.legend = FALSE) +
- # geom_vline(aes(xintercept = ymd(20200706)), color = "black") +
- # geom_vline(aes(xintercept = ymd(20210517)), color = "black") + 
- # geom_vline(aes(xintercept = ymd(20211004)), color = "black") + 
-  #  geom_vline(aes(xintercept = ymd(20220105)), color = "black") + 
+```{r "US Plots"}
+variants_plot <- ggplot(data = us, aes(x = date)) +
+  geom_area(aes(y = perc_sequences, color = variant, fill = variant), position = "dodge", show.legend = FALSE) +
   theme_minimal()
 
-cases_plot <- us %>% 
-  ggplot(aes(x = date)) +
+
+cases_plot <-
+  ggplot(data = us, aes(x = date)) +
   geom_line(aes(y = new_cases_per_million), show.legend = FALSE) +
   geom_line(aes(y = new_deaths_per_million)) + 
- # geom_vline(aes(xintercept = ymd(20200706)), color = "black") +
- # geom_vline(aes(xintercept = ymd(20210517)), color = "black") + 
- # geom_vline(aes(xintercept = ymd(20211004)), color = "black") + 
-  #  geom_vline(aes(xintercept = ymd(20220105)), color = "black") + 
   theme_minimal()
 
-deaths_plot <- us %>% 
-  ggplot(aes(x = date)) +
+
+deaths_plot <- ggplot(data = us, aes(x = date)) +
   geom_line(aes(y = new_deaths_per_million)) + 
- # geom_vline(aes(xintercept = ymd(20200706)), color = "black") +
-#geom_vline(aes(xintercept = ymd(20210517)), color = "black") + 
-#  geom_vline(aes(xintercept = ymd(20211004)), color = "black") + 
-  #  geom_vline(aes(xintercept = ymd(20220105)), color = "black") + 
   theme_minimal()
+
+
+vaccinations_plot <- ggplot(us, aes(x = date)) +
+  geom_line(aes(y = new_vaccinations_smoothed_per_million)) +
+  theme_minimal()
+
+
+variants_cases_plot <- ggplot(data = us, aes(x = date)) + 
+  geom_area(aes(y = perc_sequences, color = variant, fill = variant), show.legend =FALSE, alpha = 0.5, position = "dodge") + 
+  geom_line(aes(y = new_cases_smoothed_per_million / 40)) + 
+  scale_y_continuous("Percent of Sequences", sec.axis=sec_axis(~.*40, name = "New Cases Per Million")) + 
+  theme_minimal() + 
+  labs(title = "Proportion of Covid Variants vs New Cases Per Million")  +
+  annotate(geom="label", x=ymd(20200701), y=75, label="Alpha/Other") +
+  annotate(geom="label", x=ymd(20210901), y=75, label="Delta") +
+  annotate(geom="label", x=ymd(20220201), y=75, label="Omicron")
+
+
+variants_deaths_plot <- ggplot(data = us, aes(x = date)) + 
+  geom_area(aes(y = perc_sequences, color = variant, fill = variant),show.legend =FALSE, alpha = 0.5, position = "dodge") + 
+  geom_line(aes(y = new_deaths_smoothed_per_million*5)) + 
+  scale_y_continuous("Percent of Sequences", sec.axis=sec_axis(~./5, name = "New Deaths Per Million")) + 
+  theme_minimal() + 
+  labs(title = "Proportion of Covid Variants vs New Deaths Per Million") +
+  annotate(geom="label", x=ymd(20200701), y=75, label="Alpha/Other") +
+  annotate(geom="label", x=ymd(20210901), y=75, label="Delta") +
+  annotate(geom="label", x=ymd(20220201), y=75, label="Omicron")
+
+
+cases_vaccinations_plot <- ggplot(data = us, aes(x = date)) +
+  geom_line(aes(y = new_cases_smoothed_per_million), show.legend = FALSE) +
+  geom_line(aes(y = people_vaccinated_per_hundred*50)) + 
+  scale_y_continuous("New Cases Per Million", sec.axis=sec_axis(~./50, name = "People Vaccinated Per Hundred")) + 
+  theme_minimal() + 
+  labs(title = "New Cases Per Million vs. People Vaccinated Per Hundred")
+
+deaths_vaccinations_plot <- ggplot(us, aes(x = date)) +
+  geom_line(aes(y = new_deaths_per_million), show.legend = FALSE) +
+  geom_line(aes(y = people_fully_vaccinated_per_hundred/7)) + 
+  scale_y_continuous("New Deaths Per Million", sec.axis=sec_axis(~.*7, name = "People Vaccinated Per Hundred")) + 
+  theme_minimal() + 
+  labs(title = "New Deaths Per Million vs. People Fully Vaccinated Per Hundred")
+
+
+variants_hospitalizations_plot <- ggplot(us, aes(x = date)) + 
+  geom_area(aes(y = perc_sequences, color = variant, fill = variant), show.legend =FALSE, alpha = 0.5, position = "dodge") + 
+  geom_line(aes(y = weekly_hosp_admissions_per_million / 5)) + 
+  scale_y_continuous("Percent of Sequences", sec.axis=sec_axis(~.*5, name = "Hospitalizations Per Million")) + 
+  theme_minimal() + 
+  labs(title = "Proportion of Covid Variants vs Hospitalizations Per Million") +
+  annotate(geom="label", x=ymd(20200701), y=75, label="Alpha/Other") +
+  annotate(geom="label", x=ymd(20210901), y=75, label="Delta") +
+  annotate(geom="label", x=ymd(20220201), y=75, label="Omicron")
+
+variants_vaccinations_plot <- ggplot(us, aes(x = date)) + 
+  geom_area(aes(y = perc_sequences, color = variant, fill = variant), show.legend =FALSE, alpha = 0.5, position = "dodge") + 
+  geom_line(aes(y = people_fully_vaccinated_per_hundred)) + 
+  scale_y_continuous("Percent of Sequences", sec.axis=sec_axis(~., name = "People Vaccinated Per Hundred")) + 
+  theme_minimal() + 
+  labs(title = "Proportion of Covid Variants vs People Fully Vaccinated") +
+  annotate(geom="label", x=ymd(20200701), y=75, label="Alpha/Other") +
+  annotate(geom="label", x=ymd(20210901), y=75, label="Delta") +
+  annotate(geom="label", x=ymd(20220201), y=75, label="Omicron")
+
+variants_vaccinations_plot
 ```
 
 ```{r}
-ggplotly(variants_plot)
+vaccinations_plot
 ```
 
 ```{r}
-cases_plot
+variants_cases_plot <- ggplot(data = us, aes(x = date)) + 
+  geom_area(aes(y = perc_sequences, color = variant, fill = variant), show.legend =FALSE, alpha = 0.5, position = "dodge") + 
+  geom_line(aes(y = new_cases_smoothed_per_million / 40)) + 
+  scale_y_continuous("Percent of Sequences", sec.axis=sec_axis(~.*40, name = "New Cases Per Million")) + 
+  theme_minimal() + 
+  labs(title = "Proportion of Covid Variants vs New Cases Per Million") +
+  annotate(geom="label", x=ymd(20200701), y=75, label="Alpha/Other") +
+  annotate(geom="label", x=ymd(20210901), y=75, label="Delta") +
+  annotate(geom="label", x=ymd(20220201), y=75, label="Omicron")
+
+variants_cases_plot
 ```
 
 ```{r}
-deaths_plot
+variants_hospitalizations_plot
+```
+
+```{r}
+variants_deaths_plot
+```
+
+
+# Time Series Analysis
+
+```{r}
+us %>% 
+  plot_time_series(date, new_cases_smoothed_per_million)
 ```
 
 ```{r}
 us %>% 
-  ggplot(aes(x = date)) +
-  geom_line(aes(y = people_vaccinated_per_hundred)) +
-#  geom_vline(aes(xintercept = ymd(20200706)), color = "black") +
-# geom_vline(aes(xintercept = ymd(20210517)), color = "black") + 
-# geom_vline(aes(xintercept = ymd(20211004)), color = "black") + 
-#    geom_vline(aes(xintercept = ymd(20220105)), color = "black") + 
-  theme_minimal()
+  plot_acf_diagnostics(date, new_cases_smoothed_per_million, .show_white_noise_bars = T) 
+```
+
+
+```{r}
+gisaid_variants %>% 
+  filter(Country == "USA", variant %in% c("VOC Omicron GRA (B.1.1.529+BA.*) ", "VOC Delta GK (B.1.617.2+AY.*) ", "VOC Alpha GRY (B.1.1.7+Q.*) ")) %>% 
+  plot_time_series(date, perc_sequences, .facet_vars=variant, .legend_show = FALSE)
 ```
 
 ```{r}
-covid$date[length(covid$date)]
-USAClusters$date[length(USAClusters$date)]
+gisaid_variants %>% 
+  filter(Country == "USA", variant %in% c("VOC Omicron GRA (B.1.1.529+BA.*) ", "VOC Delta GK (B.1.617.2+AY.*) ", "VOC Alpha GRY (B.1.1.7+Q.*) ")) %>% 
+  group_by(variant) %>% 
+  plot_acf_diagnostics(date, perc_sequences, .show_white_noise_bars = T) 
 ```
 
 ```{r}
+library("sf")
+library("rnaturalearth")
+library("rnaturalearthdata")
 
+world <- ne_countries(scale = "medium", returnclass = "sf")
+class(world)
 ```
 
 ```{r}
-max(us$new_cases_per_million, na.rm = TRUE)
+unique(gisaid$Country)
+```
+
+```{r}
+unique(covid$location)
 ```
 
 
-```{r, warn = FALSE}
-ggplot(us, aes(x = date)) + 
-  geom_area(aes(y = perc_sequences, color = variant, fill = variant), alpha = 0.5, position = "dodge") + 
-  geom_line(aes(y = new_cases_per_million / 40)) + 
-  scale_y_continuous("Percent of Sequences", sec.axis=sec_axis(~.*40, name = "New Cases Per Million")) + 
-  theme_minimal() + 
-  labs(title = "Proportion of Covid Variants vs New Cases Per Million") -> p
+```{r}
+world_variants <- gisaid %>% 
+  group_by(Country) %>% 
+  mutate(Country = case_when(
+  Country == "USA" ~ "United States",
+  TRUE ~ as.character(Country)
+  )) %>% 
+  summarise(most_recent_date = date[n()], 
+            prevalent_variant = variant[date == date[n()] & Type == "Variant" & perc_sequences == max(perc_sequences)]) %>% 
+            #prevalent_lineage = variant[date == date[n()] & Type == "Lineage" & perc_sequences == max(perc_sequences)]) %>% 
+  arrange(desc(most_recent_date)) %>% 
+  rename(location = Country)
 
-ggplotly(p)
+world_variants <- left_join(world_variants, covid[, c("location", "iso_code")], by = "location", all.x = TRUE) %>% 
+  rename(gu_a3 = iso_code)
+
+world_variants_map <- left_join(world, world_variants, by = "gu_a3", all.x = TRUE)
 ```
+
+```{r}
+p <- ggplot(data = world_variants_map), aes(fill = prevalent_variant)) + 
+  geom_sf(show.legend = FALSE) + 
+  xlab("Longitude") + 
+  ylab("Latitude") + 
+  theme(panel.grid.major = element_line(color = gray(.5), linetype = "dashed", size = 0.5), panel.background = element_rect(fill = "aliceblue")) 
+```
+
+```{r}
+p
+```
+
 

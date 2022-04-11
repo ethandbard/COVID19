@@ -1,6 +1,8 @@
 used:
 owid-covid-data.csv - https://github.com/owid/covid-19-data/blob/master/public/data/owid-covid-data.csv
-USAClusters_data - https://github.com/hodcroftlab/covariants
+gisaid_variants_statistics.tsv - https://www.gisaid.org/
+
 
 not being used:
 covid-variants.csv - https://www.kaggle.com/gpreda/covid19-variants
+USAClusters_data - https://github.com/hodcroftlab/covariants
