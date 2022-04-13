@@ -22,6 +22,7 @@ library(timetk)
 library(Rssa)
 ```
 
+
 ```{r, echo = FALSE, warning=FALSE}
 covid <- read_csv("data/owid-covid-data.csv",show_col_types = FALSE)
 #variants <- read_csv("data/covid-variants.csv",show_col_types = FALSE)
@@ -40,6 +41,14 @@ gisaid_variants <- gisaid %>%
   filter(Type == "Variant") %>%
   separate(variant, c("variant", "origin"), sep = "first detected in ") %>% 
   select(-Type)
+```
+
+```{r}
+covid$date %>% 
+  range()
+
+gisaid$date %>% 
+  range()
 ```
 
 ```{r}
