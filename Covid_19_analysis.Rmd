@@ -4,7 +4,7 @@ output: html_notebook
 ---
 
 ```{r, include = FALSE}
-knitr::opts_chunk$set(echo = FALSE, warning = FALSE)
+#knitr::opts_chunk$set(echo = FALSE, warning = FALSE)
 ```
 
 ```{r, echo = FALSE, message=FALSE, warning=FALSE, comment=FALSE}
@@ -238,7 +238,6 @@ world_variants <- gisaid %>%
   summarise(most_recent_date = date[n()], 
             prevalent_variant = variant[date == date[n()] & Type == "Variant" & perc_sequences == max(perc_sequences)]) %>% 
             #prevalent_lineage = variant[date == date[n()] & Type == "Lineage" & perc_sequences == max(perc_sequences)]) %>% 
-  arrange(desc(most_recent_date)) %>% 
   rename(location = Country)
 
 world_variants <- left_join(world_variants, covid[, c("location", "iso_code")], by = "location", all.x = TRUE) %>% 
@@ -248,15 +247,15 @@ world_variants_map <- left_join(world, world_variants, by = "gu_a3", all.x = TRU
 ```
 
 ```{r}
-p <- ggplot(data = world_variants_map), aes(fill = prevalent_variant)) + 
+p <- ggplot(data = world_variants_map, aes(fill = prevalent_variant)) + 
   geom_sf(show.legend = FALSE) + 
   xlab("Longitude") + 
   ylab("Latitude") + 
-  theme(panel.grid.major = element_line(color = gray(.5), linetype = "dashed", size = 0.5), panel.background = element_rect(fill = "aliceblue")) 
+  theme(panels.grid.major = element_line(color = gray(.5), linetype = "dashed", size = 0.5), panel.background = element_rect(fill = "aliceblue")) 
 ```
 
 ```{r}
-p
+#p
 ```
 
 
