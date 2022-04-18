@@ -4,7 +4,7 @@ output: html_notebook
 ---
 
 ```{r, include = FALSE}
-#knitr::opts_chunk$set(echo = FALSE, warning = FALSE)
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE)
 ```
 
 ```{r, echo = FALSE, message=FALSE, warning=FALSE, comment=FALSE}
@@ -20,8 +20,11 @@ library(vtable)
 library(rjson)
 library(timetk)
 library(Rssa)
-```
+library(RColorBrewer)
+library(gghighlight)
 
+`%!in%` <- Negate(`%in%`)
+```
 
 ```{r, echo = FALSE, warning=FALSE}
 covid <- read_csv("data/owid-covid-data.csv",show_col_types = FALSE)
@@ -41,14 +44,6 @@ gisaid_variants <- gisaid %>%
   filter(Type == "Variant") %>%
   separate(variant, c("variant", "origin"), sep = "first detected in ") %>% 
   select(-Type)
-```
-
-```{r}
-covid$date %>% 
-  range()
-
-gisaid$date %>% 
-  range()
 ```
 
 ```{r}
@@ -78,6 +73,9 @@ my_data <- function(country_covid_filter, country_gisaid_filter){
   data <- left_join(data, gisaid_data, by = "date")
   data
 }
+
+#covid - United States
+#gisaid - "USA"
 
 us <- my_data("United States", "USA")
 ```
@@ -170,6 +168,7 @@ variants_vaccinations_plot
 vaccinations_plot
 ```
 
+
 ```{r}
 variants_cases_plot <- ggplot(data = us, aes(x = date)) + 
   geom_area(aes(y = perc_sequences, color = variant, fill = variant), show.legend =FALSE, alpha = 0.5, position = "dodge") + 
@@ -229,42 +228,174 @@ class(world)
 ```
 
 ```{r}
-unique(gisaid$Country)
-```
-
-```{r}
-unique(covid$location)
-```
-
-
-```{r}
-world_variants <- gisaid %>% 
-  group_by(Country) %>% 
-  mutate(Country = case_when(
-  Country == "USA" ~ "United States",
-  TRUE ~ as.character(Country)
-  )) %>% 
-  summarise(most_recent_date = date[n()], 
-            prevalent_variant = variant[date == date[n()] & Type == "Variant" & perc_sequences == max(perc_sequences)]) %>% 
-            #prevalent_lineage = variant[date == date[n()] & Type == "Lineage" & perc_sequences == max(perc_sequences)]) %>% 
+world_variants_df <- gisaid_variants %>% 
+    group_by(Country,) %>% 
+    mutate(Country = case_when(
+      Country == "USA" ~ "United States",
+          TRUE ~ as.character(Country)
+          )) %>% 
+  summarise(most_recent_date = date[n()],
+            prevalent_variant = variant[date == date[n()] & perc_sequences == max(perc_sequences[date == date[n()]])],
+            .groups = 'drop') %>% 
+  arrange(desc(most_recent_date)) %>% 
   rename(location = Country)
 
-world_variants <- left_join(world_variants, covid[, c("location", "iso_code")], by = "location", all.x = TRUE) %>% 
-  rename(gu_a3 = iso_code)
+world_variants_df %>% 
+  arrange(most_recent_date)
+```
 
-world_variants_map <- left_join(world, world_variants, by = "gu_a3", all.x = TRUE)
+```{r, warning=FALSE}
+world_cases_per_mil_df <- covid %>% 
+  group_by(location) %>% 
+  summarise(most_recent_date = date[max(which(!is.na(new_cases_smoothed_per_million)))],
+              new_cases_per_mil = new_cases_smoothed_per_million[max(which(!is.na(new_cases_smoothed_per_million)))])
+
+world_cases_df <- covid %>% 
+  group_by(location) %>% 
+  summarise(most_recent_date = date[max(which(!is.na(new_cases_smoothed)))],
+              new_cases = new_cases_smoothed[max(which(!is.na(new_cases_smoothed)))])
 ```
 
 ```{r}
-p <- ggplot(data = world_variants_map, aes(fill = prevalent_variant)) + 
-  geom_sf(show.legend = FALSE) + 
-  xlab("Longitude") + 
-  ylab("Latitude") + 
-  theme(panels.grid.major = element_line(color = gray(.5), linetype = "dashed", size = 0.5), panel.background = element_rect(fill = "aliceblue")) 
+world_variants_loc <- left_join(world_variants_df, covid[, c("location", "iso_code")], by = "location", all.x = TRUE, all.y = FALSE) %>% 
+  rename(gu_a3 = iso_code) %>% 
+  unique()
+
+world_cases_per_mil_loc <- left_join(world_cases_per_mil_df, covid[, c("location", "iso_code")], by = "location", all.x = TRUE, all.y = FALSE) %>% 
+  rename(gu_a3 = iso_code) %>% 
+  unique()
+
+world_cases_loc <- left_join(world_cases_df, covid[, c("location", "iso_code")], by = "location", all.x = TRUE, all.y = FALSE) %>% 
+  rename(gu_a3 = iso_code) %>% 
+  unique()
+
+world_variants_map <- left_join(world, world_variants_loc, by = "gu_a3", all.x = TRUE)
+
+world_cases_per_mil_map <- left_join(world, world_cases_per_mil_loc, by = "gu_a3", all.x = TRUE)
+
+world_cases_map <- left_join(world, world_cases_loc, by = "gu_a3", all.x = TRUE)
 ```
 
 ```{r}
-#p
+p <- ggplot(data = world_variants_map, aes(fill = prevalent_variant, text = paste0("Country: ", name, "\nLast date: ", most_recent_date))) + 
+  geom_sf() + 
+  xlab("") + 
+  ylab("") + 
+  labs(title = "Most Prevalent Covid Variant by Country") +
+  theme(panel.grid.major = element_line(color = gray(.5), linetype = "dashed", size = 0.5), panel.background = element_rect(fill = "white"),                legend.position = "bottom", 
+              legend.text= element_text(size = 5),
+              legend.title = element_blank(),
+              legend.key.size = unit(1, "line")
+              ) 
+
+p
 ```
 
+```{r}
+p <- ggplot(data = world_cases_per_mil_map, aes(fill = new_cases_per_mil, text = paste0("Country: ", name, "\nLast date: ", most_recent_date))) + 
+  geom_sf() + 
+  xlab("") + 
+  ylab("") +
+  labs(fill = "New Cases Per Million") + 
+  labs(title = "New Cases Per Million by Country") +
+  theme(panel.grid.major = element_line(color = gray(.5), linetype = "dashed", size = 0.5), panel.background = element_rect(fill = "white"),                legend.position = "bottom", 
+              legend.text= element_text(size = 5),
+              legend.key.size = unit(1, "line")
+              ) + 
+  scale_fill_viridis_c(option = "F", direction = -1)
+
+p
+```
+
+```{r}
+p <- ggplot(data = world_cases_map, aes(fill = new_cases, text = paste0("Country: ", name, "\nLast date: ", most_recent_date))) + 
+  geom_sf() + 
+  xlab("") + 
+  ylab("") +
+  labs(fill = "New Cases") + 
+  labs(title = "New Cases by Country") +
+  theme(panel.grid.major = element_line(color = gray(.5), linetype = "dashed", size = 0.5), panel.background = element_rect(fill = "white"),                legend.position = "bottom", 
+              legend.text= element_text(size = 5),
+              legend.key.size = unit(1, "line")
+              ) + 
+  scale_fill_viridis_c(option = "F", direction = -1)
+
+p
+```
+
+
+```{r}
+world_cases_per_mil_df %>% 
+  arrange(-new_cases_per_mil)
+```
+
+```{r}
+world_cases_df %>% 
+  filter(location %!in% c("World", "High income", "Europe", "European Union", "Asia", "Upper middle income", "Lower middle income", "Oceania", "North America", "South America")) %>% 
+  arrange(-new_cases)
+```
+
+```{r}
+cases <- covid %>% 
+  filter(location %!in% c("World", "High income", "Europe", "European Union", "Asia", "Upper middle income", "Lower middle income", "Oceania", "North America", "South America")) %>% 
+  select(date, location, new_cases_smoothed) %>%
+  drop_na() %>% 
+  glimpse()
+```
+
+```{r}
+spread_cases <- cases %>% 
+  spread(location, new_cases_smoothed)
+```
+
+```{r}
+cases <- t(spread_cases[-1])
+cases_dist <- dist(cases, method = "euclidean")
+fit <- hclust(cases_dist, method = "ward.D")
+```
+
+```{r}
+library(ggdendro)
+ggdendrogram(fit, rotate = TRUE, theme_dendro = FALSE) + 
+  theme_minimal() + 
+  xlab("") +
+  ylab("") 
+```
+
+```{r}
+d <- cut(as.dendrogram(fit), h = 10000000)
+d
+```
+
+```{r}
+plot(d$lower[[2]])
+par(mfrow = c(1,1))
+```
+
+```{r}
+clustered_data <- cutree(fit, k = 4)
+clustered_data_tidy <- as.data.frame(as.table(clustered_data)) %>% 
+  glimpse()
+colnames(clustered_data_tidy) <- c("location", "cluster")
+clustered_data_tidy$location <- as.character(clustered_data_tidy$location)
+
+joined_clusters <- cases %>% 
+  inner_join(clustered_data_tidy, by = "location") %>% 
+  glimpse()
+```
+
+```{r}
+table(clustered_data_tidy$cluster)
+```
+
+```{r}
+cluster3 <- joined_clusters %>% 
+  filter(cluster == "3")
+
+ggplot(cluster3, aes(date, new_cases_smoothed)) +
+  geom_line(color = "grey") +
+  theme_minimal() +
+  geom_smooth(method = "auto", color = "red", se = F, size = 0.5) +
+  facet_wrap(~location)
+```
 
