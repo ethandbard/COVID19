@@ -22,6 +22,10 @@ library(timetk)
 library(Rssa)
 library(RColorBrewer)
 library(gghighlight)
+library(tseries)
+library(forecast)
+library(tsibble)
+#library(brotools)
 
 `%!in%` <- Negate(`%in%`)
 ```
@@ -78,8 +82,10 @@ my_data <- function(country_covid_filter, country_gisaid_filter){
 #gisaid - "USA"
 
 us <- my_data("United States", "USA")
+france <- my_data("France", "France")
+germany <- my_data("Germany", "Germany")
+skorea <- my_data("South Korea", "South Korea")
 ```
-
 
 ```{r "US Plots"}
 variants_plot <- ggplot(data = us, aes(x = date)) +
@@ -160,14 +166,11 @@ variants_vaccinations_plot <- ggplot(us, aes(x = date)) +
   annotate(geom="label", x=ymd(20200701), y=75, label="Alpha/Other") +
   annotate(geom="label", x=ymd(20210901), y=75, label="Delta") +
   annotate(geom="label", x=ymd(20220201), y=75, label="Omicron")
-
-variants_vaccinations_plot
 ```
 
 ```{r}
-vaccinations_plot
+variants_vaccinations_plot
 ```
-
 
 ```{r}
 variants_cases_plot <- ggplot(data = us, aes(x = date)) + 
@@ -176,9 +179,9 @@ variants_cases_plot <- ggplot(data = us, aes(x = date)) +
   scale_y_continuous("Percent of Sequences", sec.axis=sec_axis(~.*40, name = "New Cases Per Million")) + 
   theme_minimal() + 
   labs(title = "Proportion of Covid Variants vs New Cases Per Million") +
-  annotate(geom="label", x=ymd(20200701), y=75, label="Alpha/Other") +
+  annotate(geom="label", x=ymd(20210501), y=50, label="Alpha") +
   annotate(geom="label", x=ymd(20210901), y=75, label="Delta") +
-  annotate(geom="label", x=ymd(20220201), y=75, label="Omicron")
+  annotate(geom="label", x=ymd(20220215), y=75, label="Omicron")
 
 variants_cases_plot
 ```
@@ -189,33 +192,6 @@ variants_hospitalizations_plot
 
 ```{r}
 variants_deaths_plot
-```
-
-
-# Time Series Analysis
-
-```{r}
-us %>% 
-  plot_time_series(date, new_cases_smoothed_per_million)
-```
-
-```{r}
-us %>% 
-  plot_acf_diagnostics(date, new_cases_smoothed_per_million, .show_white_noise_bars = T) 
-```
-
-
-```{r}
-gisaid_variants %>% 
-  filter(Country == "USA", variant %in% c("VOC Omicron GRA (B.1.1.529+BA.*) ", "VOC Delta GK (B.1.617.2+AY.*) ", "VOC Alpha GRY (B.1.1.7+Q.*) ")) %>% 
-  plot_time_series(date, perc_sequences, .facet_vars=variant, .legend_show = FALSE)
-```
-
-```{r}
-gisaid_variants %>% 
-  filter(Country == "USA", variant %in% c("VOC Omicron GRA (B.1.1.529+BA.*) ", "VOC Delta GK (B.1.617.2+AY.*) ", "VOC Alpha GRY (B.1.1.7+Q.*) ")) %>% 
-  group_by(variant) %>% 
-  plot_acf_diagnostics(date, perc_sequences, .show_white_noise_bars = T) 
 ```
 
 ```{r}
@@ -241,7 +217,7 @@ world_variants_df <- gisaid_variants %>%
   rename(location = Country)
 
 world_variants_df %>% 
-  arrange(most_recent_date)
+  arrange(desc(most_recent_date))
 ```
 
 ```{r, warning=FALSE}
@@ -292,6 +268,10 @@ p
 ```
 
 ```{r}
+
+```
+
+```{r}
 p <- ggplot(data = world_cases_per_mil_map, aes(fill = new_cases_per_mil, text = paste0("Country: ", name, "\nLast date: ", most_recent_date))) + 
   geom_sf() + 
   xlab("") + 
@@ -323,7 +303,6 @@ p <- ggplot(data = world_cases_map, aes(fill = new_cases, text = paste0("Country
 p
 ```
 
-
 ```{r}
 world_cases_per_mil_df %>% 
   arrange(-new_cases_per_mil)
@@ -337,10 +316,10 @@ world_cases_df %>%
 
 ```{r}
 cases <- covid %>% 
-  filter(location %!in% c("World", "High income", "Europe", "European Union", "Asia", "Upper middle income", "Lower middle income", "Oceania", "North America", "South America")) %>% 
+  filter(location %!in% c("World", "High income", "Europe", "European Union", "Asia", "Upper middle income", "Lower middle income", "Oceania", "North America", "South America", "Africa", "Low income")) %>% 
   select(date, location, new_cases_smoothed) %>%
   drop_na() %>% 
-  glimpse()
+  glimpse() 
 ```
 
 ```{r}
@@ -349,31 +328,24 @@ spread_cases <- cases %>%
 ```
 
 ```{r}
-cases <- t(spread_cases[-1])
-cases_dist <- dist(cases, method = "euclidean")
+cases_t <- t(spread_cases[-1])
+cases_dist <- dist(cases_t, method = "euclidean")
 fit <- hclust(cases_dist, method = "ward.D")
 ```
 
 ```{r}
 library(ggdendro)
-ggdendrogram(fit, rotate = TRUE, theme_dendro = FALSE) + 
-  theme_minimal() + 
-  xlab("") +
-  ylab("") 
+ggdendrogram(fit, rotate = TRUE, theme_dendro = FALSE) +
+  theme_minimal() + xlab("") + ylab("")
 ```
 
 ```{r}
-d <- cut(as.dendrogram(fit), h = 10000000)
+d <- cut(as.dendrogram(fit), h = 20000000)
 d
 ```
 
 ```{r}
-plot(d$lower[[2]])
-par(mfrow = c(1,1))
-```
-
-```{r}
-clustered_data <- cutree(fit, k = 4)
+clustered_data <- cutree(fit, k = 5)
 clustered_data_tidy <- as.data.frame(as.table(clustered_data)) %>% 
   glimpse()
 colnames(clustered_data_tidy) <- c("location", "cluster")
@@ -389,6 +361,52 @@ table(clustered_data_tidy$cluster)
 ```
 
 ```{r}
+joined_clusters %>% 
+  group_by(location) %>% 
+  summarise(most_recent_date = date[max(which(!is.na(new_cases_smoothed)))],
+            new_cases = new_cases_smoothed[max(which(!is.na(new_cases_smoothed)))],
+            cluster = cluster[1]) %>% 
+  merge(world_variants_df[, c("location", "prevalent_variant")], by = "location") %>% 
+  arrange(-new_cases)
+```
+
+```{r}
+ggplot(joined_clusters) +
+  geom_area(aes(x = date, y = new_cases_smoothed,fill = factor(cluster)), alpha = 0.5, position = "dodge") + 
+  theme_minimal() + 
+  scale_y_continuous(labels = comma) + 
+  labs(title = "New Cases By Cluster", x = "", y = "", fill = "Cluster") 
+```
+
+```{r}
+cluster1 <- joined_clusters %>% 
+  filter(cluster == "1")
+
+p <- ggplot(cluster1, aes(date, new_cases_smoothed)) +
+  geom_line(aes(color = location)) +
+  theme_minimal() +
+  geom_smooth(method = "auto", color = "red", se = F, size = 0.5) +
+  theme(legend.position = "none") +
+ # facet_wrap(~location, scale = 'free') 
+  labs(title = "Cluster 1")
+
+ggplotly(p)
+```
+
+```{r}
+cluster2 <- joined_clusters %>% 
+  filter(cluster == "2")
+
+ggplot(cluster2, aes(date, new_cases_smoothed)) +
+  geom_line(color = "grey") +
+  theme_minimal() +
+  geom_smooth(method = "auto", color = "red", se = F, size = 0.5) +
+  facet_wrap(~location, scales = 'free') + 
+  theme(axis.text.x = element_blank()) + 
+  labs(title = "Cluster 2")
+```
+
+```{r}
 cluster3 <- joined_clusters %>% 
   filter(cluster == "3")
 
@@ -396,6 +414,452 @@ ggplot(cluster3, aes(date, new_cases_smoothed)) +
   geom_line(color = "grey") +
   theme_minimal() +
   geom_smooth(method = "auto", color = "red", se = F, size = 0.5) +
-  facet_wrap(~location)
+  facet_wrap(~location, scales = 'free') + 
+  theme(axis.text.x = element_blank(), axis.text.y = element_text(size = 5))+ 
+  labs(title = "Cluster 3")
 ```
 
+```{r}
+cluster4 <- joined_clusters %>% 
+  filter(cluster == "4")
+
+ggplot(cluster4, aes(date, new_cases_smoothed)) +
+  geom_line(color = "grey") +
+  theme_minimal() +
+  geom_smooth(method = "auto", color = "red", se = F, size = 0.5) +
+  facet_wrap(~location, scale = 'free')+ 
+  labs(title = "Cluster 4")
+```
+
+```{r}
+cluster5 <- joined_clusters %>% 
+  filter(cluster == "5")
+
+ggplot(cluster5, aes(date, new_cases_smoothed)) +
+  geom_line(color = "grey") +
+  theme_minimal() +
+  geom_smooth(method = "auto", color = "red", se = F, size = 0.5) +
+  facet_wrap(~location, scale = 'free')+ 
+  labs(title = "Cluster 5")
+```
+
+```{r}
+#clustered_data_tidy %>% 
+#  mutate(location = case_when(
+#    location == "United States" ~ "United States"
+#  ))
+
+world_clusters_loc <- left_join(clustered_data_tidy, covid[, c("location", "iso_code")], by = "location", all.x = TRUE, all.y = FALSE) %>% 
+  rename(gu_a3 = iso_code) %>% 
+  unique()
+
+world_clusters_map <- left_join(world, world_clusters_loc, by = "gu_a3", all.x = TRUE)
+```
+
+```{r}
+p <- ggplot(data = world_clusters_map, aes(fill = factor(cluster), text = paste0("Country: ", name, "\nCluster: ", cluster))) + 
+  geom_sf() + 
+  xlab("") + 
+  ylab("") +
+  labs(fill = "Clusters") + 
+  labs(title = "Countries Clustered by Cases Over Time") +
+  theme(panel.grid.major = element_line(color = gray(.5), linetype = "dashed", size = 0.5), panel.background = element_rect(fill = "white"),                legend.position = "bottom", 
+              legend.text= element_text(size = 5),
+              legend.key.size = unit(1, "line")
+              ) + 
+  scale_fill_brewer(palette = "Accent")
+
+p
+```
+
+
+
+
+```{r}
+#export cases with clusters to csv for python analysis
+write.csv(joined_clusters, "data\\cases_clustered.csv")
+```
+
+# ARIMA modeling
+
+```{r}
+#USA
+clean <- joined_clusters %>% 
+  filter(location == "United States") %>% 
+  select(date, new_cases_smoothed) %>% 
+  mutate(date = ymd(date))
+
+fit <- auto.arima(clean[,c("new_cases_smoothed")])
+fit
+
+forecastedValues <- forecast(fit, 30)
+
+print(forecastedValues)
+
+clean$date[length(clean$date)]
+
+clean %>% 
+  mutate(num = seq(1,length(clean$date)))
+
+seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30)
+
+forecast <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30), 
+           pred = forecastedValues$mean, 
+           Lo95 = forecastedValues$lower[,2],
+           Hi95 = forecastedValues$upper[,2])
+
+#plot(forecastedValues)
+
+clean %>%
+  ggplot() +
+  geom_line(aes(y = new_cases_smoothed, x = date), colour = "black") +
+  geom_ribbon(data = forecast, aes(x = date, ymin = Lo95, ymax = Hi95), fill = "gray", alpha = 0.5) +
+  geom_line(data = forecast, aes(x = date, y = pred), linetype = 2, colour = "red") + 
+  theme_minimal() + 
+  scale_y_continuous(labels = comma) +
+  labs(title = "United States 30 Day Forecast of New Cases", x = "", y = "")
+
+ggplot(data = us, aes(x = date)) + 
+  geom_area(aes(y = perc_sequences, color = variant, fill = variant), show.legend =FALSE, alpha = 0.5, position = "dodge") + 
+  geom_line(aes(y = new_cases_smoothed_per_million / 40)) + 
+  scale_y_continuous("Percent of Sequences", sec.axis=sec_axis(~.*40, name = "New Cases Per Million")) + 
+  theme_minimal() + 
+  labs(title = "Proportion of Covid Variants vs New Cases Per Million")  +
+  annotate(geom="label", x=ymd(20210501), y=50, label="Alpha") +
+  annotate(geom="label", x=ymd(20210901), y=75, label="Delta") +
+  annotate(geom="label", x=ymd(20220215), y=75, label="Omicron")
+```
+
+```{r}
+#Austria
+clean <- joined_clusters %>% 
+  filter(location == "Austria") %>% 
+  select(date, new_cases_smoothed) %>% 
+  mutate(date = ymd(date))
+
+fit <- auto.arima(clean[,c("new_cases_smoothed")])
+fit
+
+forecastedValues <- forecast(fit, 30)
+
+print(forecastedValues)
+
+clean$date[length(clean$date)]
+
+clean %>% 
+  mutate(num = seq(1,length(clean$date)))
+
+seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30)
+
+forecast <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30), 
+           pred = forecastedValues$mean, 
+           Lo95 = forecastedValues$lower[,2],
+           Hi95 = forecastedValues$upper[,2])
+
+#plot(forecastedValues)
+
+clean %>%
+  ggplot() +
+  geom_line(aes(y = new_cases_smoothed, x = date), colour = "black") +
+  geom_ribbon(data = forecast, aes(x = date, ymin = Lo95, ymax = Hi95), fill = "gray", alpha = 0.5) +
+  geom_line(data = forecast, aes(x = date, y = pred), linetype = 2, colour = "red") + 
+  theme_minimal() + 
+  scale_y_continuous(labels = comma) +
+  labs(title = "Austria 30 Day Forecast of New Cases", x = "", y = "")
+```
+
+```{r}
+#India
+clean <- joined_clusters %>% 
+  filter(location == "India") %>% 
+  select(date, new_cases_smoothed) %>% 
+  mutate(date = ymd(date))
+
+fit <- auto.arima(clean[,c("new_cases_smoothed")])
+fit
+
+forecastedValues <- forecast(fit, 30)
+
+print(forecastedValues)
+
+clean$date[length(clean$date)]
+
+clean %>% 
+  mutate(num = seq(1,length(clean$date)))
+
+seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30)
+
+forecast <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30), 
+           pred = forecastedValues$mean, 
+           Lo95 = forecastedValues$lower[,2],
+           Hi95 = forecastedValues$upper[,2])
+
+#plot(forecastedValues)
+
+clean %>%
+  ggplot() +
+  geom_line(aes(y = new_cases_smoothed, x = date), colour = "black") +
+  geom_ribbon(data = forecast, aes(x = date, ymin = Lo95, ymax = Hi95), fill = "gray", alpha = 0.5) +
+  geom_line(data = forecast, aes(x = date, y = pred), linetype = 2, colour = "red") + 
+  theme_minimal() + 
+  scale_y_continuous(labels = comma) +
+  labs(title = "India 30 Day Forecast of New Cases", x = "", y = "")
+```
+
+```{r}
+#France
+clean <- joined_clusters %>% 
+  filter(location == "France") %>% 
+  select(date, new_cases_smoothed) %>% 
+  mutate(date = ymd(date))
+
+fit <- auto.arima(clean[,c("new_cases_smoothed")])
+fit
+
+forecastedValues <- forecast(fit, 30)
+
+print(forecastedValues)
+
+clean$date[length(clean$date)]
+
+clean %>% 
+  mutate(num = seq(1,length(clean$date)))
+
+seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30)
+
+forecast <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30), 
+           pred = forecastedValues$mean, 
+           Lo95 = forecastedValues$lower[,2],
+           Hi95 = forecastedValues$upper[,2])
+
+#plot(forecastedValues)
+
+clean %>%
+  ggplot() +
+  geom_line(aes(y = new_cases_smoothed, x = date), colour = "black") +
+  geom_ribbon(data = forecast, aes(x = date, ymin = Lo95, ymax = Hi95), fill = "gray", alpha = 0.5) +
+  geom_line(data = forecast, aes(x = date, y = pred), linetype = 2, colour = "red") + 
+  theme_minimal() + 
+  scale_y_continuous(labels = comma) +
+  labs(title = "France 30 Day Forecast of New Cases", x = "", y = "")
+
+ggplot(data = france, aes(x = date)) + 
+  geom_area(aes(y = perc_sequences, color = variant, fill = variant), show.legend =FALSE, alpha = 0.5, position = "dodge") + 
+  geom_line(aes(y = new_cases_smoothed_per_million/ 60)) + 
+  scale_y_continuous("Percent of Sequences", sec.axis=sec_axis(~.*60, name = "New Cases Per Million")) + 
+  theme_minimal() + 
+  labs(title = "Proportion of Covid Variants vs New Cases Per Million")  +
+  annotate(geom="label", x=ymd(20210501), y=50, label="Alpha") +
+  annotate(geom="label", x=ymd(20210901), y=75, label="Delta") +
+  annotate(geom="label", x=ymd(20220215), y=75, label="Omicron")
+```
+
+```{r}
+#Germany
+clean <- joined_clusters %>% 
+  filter(location == "Germany") %>% 
+  select(date, new_cases_smoothed) %>% 
+  mutate(date = ymd(date))
+
+fit <- auto.arima(clean[,c("new_cases_smoothed")])
+fit
+
+forecastedValues <- forecast(fit, 30)
+
+print(forecastedValues)
+
+clean$date[length(clean$date)]
+
+clean %>% 
+  mutate(num = seq(1,length(clean$date)))
+
+seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30)
+
+forecast <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30), 
+           pred = forecastedValues$mean, 
+           Lo95 = forecastedValues$lower[,2],
+           Hi95 = forecastedValues$upper[,2])
+
+#plot(forecastedValues)
+
+clean %>%
+  ggplot() +
+  geom_line(aes(y = new_cases_smoothed, x = date), colour = "black") +
+  geom_ribbon(data = forecast, aes(x = date, ymin = Lo95, ymax = Hi95), fill = "gray", alpha = 0.5) +
+  geom_line(data = forecast, aes(x = date, y = pred), linetype = 2, colour = "red") + 
+  theme_minimal() + 
+  scale_y_continuous(labels = comma) +
+  labs(title = "Germany 30 Day Forecast of New Cases", x = "", y = "")
+
+ggplot(data = germany, aes(x = date)) + 
+  geom_area(aes(y = perc_sequences, color = variant, fill = variant), show.legend =FALSE, alpha = 0.5, position = "dodge") + 
+  geom_line(aes(y = new_cases_smoothed_per_million/ 50)) + 
+  scale_y_continuous("Percent of Sequences", sec.axis=sec_axis(~.*50, name = "New Cases Per Million")) + 
+  theme_minimal() + 
+  labs(title = "Proportion of Covid Variants vs New Cases Per Million")  +
+  annotate(geom="label", x=ymd(20210501), y=75, label="Alpha") +
+  annotate(geom="label", x=ymd(20210901), y=75, label="Delta") +
+  annotate(geom="label", x=ymd(20220215), y=75, label="Omicron")
+```
+
+```{r}
+#Italy
+clean <- joined_clusters %>% 
+  filter(location == "Italy") %>% 
+  select(date, new_cases_smoothed) %>% 
+  mutate(date = ymd(date))
+
+fit <- auto.arima(clean[,c("new_cases_smoothed")])
+fit
+
+forecastedValues <- forecast(fit, 30)
+
+print(forecastedValues)
+
+clean$date[length(clean$date)]
+
+clean %>% 
+  mutate(num = seq(1,length(clean$date)))
+
+seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30)
+
+forecast <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30), 
+           pred = forecastedValues$mean, 
+           Lo95 = forecastedValues$lower[,2],
+           Hi95 = forecastedValues$upper[,2])
+
+#plot(forecastedValues)
+
+clean %>%
+  ggplot() +
+  geom_line(aes(y = new_cases_smoothed, x = date), colour = "black") +
+  geom_ribbon(data = forecast, aes(x = date, ymin = Lo95, ymax = Hi95), fill = "gray", alpha = 0.5) +
+  geom_line(data = forecast, aes(x = date, y = pred), linetype = 2, colour = "red") + 
+  theme_minimal() + 
+  scale_y_continuous(labels = comma) +
+  labs(title = "Italy 30 Day Forecast of New Cases", x = "", y = "")
+```
+
+```{r}
+#South Korea
+clean <- joined_clusters %>% 
+  filter(location == "South Korea") %>% 
+  select(date, new_cases_smoothed) %>% 
+  mutate(date = ymd(date))
+
+fit <- auto.arima(clean[,c("new_cases_smoothed")])
+fit
+
+forecastedValues <- forecast(fit, 30)
+
+print(forecastedValues)
+
+clean$date[length(clean$date)]
+
+clean %>% 
+  mutate(num = seq(1,length(clean$date)))
+
+seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30)
+
+forecast <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30), 
+           pred = forecastedValues$mean, 
+           Lo95 = forecastedValues$lower[,2],
+           Hi95 = forecastedValues$upper[,2])
+
+#plot(forecastedValues)
+
+clean %>%
+  ggplot() +
+  geom_line(aes(y = new_cases_smoothed, x = date), colour = "black") +
+  geom_ribbon(data = forecast, aes(x = date, ymin = Lo95, ymax = Hi95), fill = "gray", alpha = 0.5) +
+  geom_line(data = forecast, aes(x = date, y = pred), linetype = 2, colour = "red") + 
+  theme_minimal() + 
+  scale_y_continuous(labels = comma) +
+  labs(title = "South Korea 30 Day Forecast of New Cases", x = "", y = "")
+
+ggplot(data = skorea, aes(x = date)) + 
+  geom_area(aes(y = perc_sequences, color = variant, fill = variant), show.legend =FALSE, alpha = 0.5, position = "dodge") + 
+  geom_line(aes(y = new_cases_smoothed_per_million/ 80)) + 
+  scale_y_continuous("Percent of Sequences", sec.axis=sec_axis(~.*80, name = "New Cases Per Million")) + 
+  theme_minimal() + 
+  labs(title = "Proportion of Covid Variants vs New Cases Per Million")  +
+  #annotate(geom="label", x=ymd(20210501), y=75, label="Alpha") +
+  annotate(geom="label", x=ymd(20211001), y=75, label="Delta") +
+  annotate(geom="label", x=ymd(20220215), y=75, label="Omicron")
+```
+
+```{r}
+#Vietnam
+clean <- joined_clusters %>% 
+  filter(location == "Vietnam") %>% 
+  select(date, new_cases_smoothed) %>% 
+  mutate(date = ymd(date))
+
+fit <- auto.arima(clean[,c("new_cases_smoothed")])
+fit
+
+forecastedValues <- forecast(fit, 30)
+
+print(forecastedValues)
+
+clean$date[length(clean$date)]
+
+clean %>% 
+  mutate(num = seq(1,length(clean$date)))
+
+seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30)
+
+forecast <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30), 
+           pred = forecastedValues$mean, 
+           Lo95 = forecastedValues$lower[,2],
+           Hi95 = forecastedValues$upper[,2])
+
+#plot(forecastedValues)
+
+clean %>%
+  ggplot() +
+  geom_line(aes(y = new_cases_smoothed, x = date), colour = "black") +
+  geom_ribbon(data = forecast, aes(x = date, ymin = Lo95, ymax = Hi95), fill = "gray", alpha = 0.5) +
+  geom_line(data = forecast, aes(x = date, y = pred), linetype = 2, colour = "red") + 
+  theme_minimal() + 
+  scale_y_continuous(labels = comma) +
+  labs(title = "Vietnam 30 Day Forecast of New Cases", x = "", y = "")
+```
+
+```{r}
+#China
+clean <- joined_clusters %>% 
+  filter(location == "China") %>% 
+  select(date, new_cases_smoothed) %>% 
+  mutate(date = ymd(date))
+
+fit <- auto.arima(clean[,c("new_cases_smoothed")])
+fit
+
+forecastedValues <- forecast(fit, 30)
+
+print(forecastedValues)
+
+clean$date[length(clean$date)]
+
+clean %>% 
+  mutate(num = seq(1,length(clean$date)))
+
+seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30)
+
+forecast <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30), 
+           pred = forecastedValues$mean, 
+           Lo95 = forecastedValues$lower[,2],
+           Hi95 = forecastedValues$upper[,2])
+
+#plot(forecastedValues)
+
+clean %>%
+  ggplot() +
+  geom_line(aes(y = new_cases_smoothed, x = date), colour = "black") +
+  geom_ribbon(data = forecast, aes(x = date, ymin = Lo95, ymax = Hi95), fill = "gray", alpha = 0.5) +
+  geom_line(data = forecast, aes(x = date, y = pred), linetype = 2, colour = "red") + 
+  theme_minimal() + 
+  scale_y_continuous(labels = comma) +
+  labs(title = "China 30 Day Forecast of New Cases", x = "", y = "")
+```
