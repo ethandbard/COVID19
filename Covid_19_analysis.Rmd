@@ -434,44 +434,44 @@ world_cases_df %>%
   kable_paper("striped", full_width = F)
 ```
 
+# Cluster Analysis
+
 ```{r}
+#create cases set
 cases <- covid %>% 
   filter(location %!in% c("World", "High income", "Europe", "European Union", "Asia", "Upper middle income", "Lower middle income", "Oceania", "North America", "South America", "Africa", "Low income")) %>% 
   select(date, location, new_cases_smoothed) %>%
-  drop_na() %>% 
-  glimpse() 
-```
+  drop_na()
 
-```{r}
+#spread data by cases
 spread_cases <- cases %>% 
+  select(date, location, new_cases_smoothed) %>% 
+  drop_na %>% 
   spread(location, new_cases_smoothed)
-```
 
-```{r}
+#euclidean distance and ward's method
 cases_t <- t(spread_cases[-1])
 cases_dist <- dist(cases_t, method = "euclidean")
 fit <- hclust(cases_dist, method = "ward.D")
-```
 
-```{r}
+#dendrogram
 library(ggdendro)
 ggdendrogram(fit, rotate = TRUE, theme_dendro = FALSE) +
   theme_minimal() + xlab("") + ylab("") + scale_y_continuous(labels = comma)
-```
 
-```{r}
+#create clusters
 clustered_data <- cutree(fit, k = 5)
 clustered_data_tidy <- as.data.frame(as.table(clustered_data)) %>% 
   glimpse()
 colnames(clustered_data_tidy) <- c("location", "cluster")
 clustered_data_tidy$location <- as.character(clustered_data_tidy$location)
 
+#join clusters to location
 joined_clusters <- cases %>% 
   inner_join(clustered_data_tidy, by = "location") %>% 
   glimpse()
-```
 
-```{r}
+#print table of clusters and counts
 table(clustered_data_tidy$cluster)
 ```
 
@@ -526,7 +526,8 @@ ggplot(cluster2, aes(date, new_cases_smoothed)) +
   geom_smooth(method = "auto", color = "red", se = F, size = 0.5) +
   facet_wrap(~location, scales = 'free') + 
   theme(axis.text.x = element_blank()) + 
-  labs(title = "Cluster 2")
+  labs(title = "Cluster 2 New Cases Smoothed", x = "", y = "")+ 
+  scale_y_continuous(labels = comma)
 ```
 
 ```{r}
@@ -538,8 +539,9 @@ ggplot(cluster3, aes(date, new_cases_smoothed)) +
   theme_minimal() +
   geom_smooth(method = "auto", color = "red", se = F, size = 0.5) +
   facet_wrap(~location, scales = 'free') + 
-  theme(axis.text.x = element_blank(), axis.text.y = element_text(size = 5))+ 
-  labs(title = "Cluster 3")
+  theme(axis.text.x = element_blank(), axis.text.y = element_text(size = 6.5))+ 
+  labs(title = "Cluster 3 New Cases Smoothed", y = "", x = "")+ 
+  scale_y_continuous(labels = comma)
 ```
 
 ```{r}
@@ -551,7 +553,8 @@ ggplot(cluster4, aes(date, new_cases_smoothed)) +
   theme_minimal() +
   geom_smooth(method = "auto", color = "red", se = F, size = 0.5) +
   facet_wrap(~location, scale = 'free')+ 
-  labs(title = "Cluster 4")
+  labs(title = "Cluster 4 New Cases Smoothed", y = "", x = "") + 
+  scale_y_continuous(labels = comma)
 ```
 
 ```{r}
@@ -563,7 +566,8 @@ ggplot(cluster5, aes(date, new_cases_smoothed)) +
   theme_minimal() +
   geom_smooth(method = "auto", color = "red", se = F, size = 0.5) +
   facet_wrap(~location, scale = 'free')+ 
-  labs(title = "Cluster 5")
+  labs(title = "Cluster 5 New Cases Smoothed", x = "", y = "") + 
+  scale_y_continuous(labels = comma)
 ```
 
 ```{r}
@@ -631,17 +635,33 @@ ggplot(data = world_clusters_map, aes(fill = factor(cluster), text = paste0("Cou
 
 ```{r}
 #USA
-clean <- joined_clusters %>% 
-  filter(location == "United States") %>% 
-  select(date, new_cases_smoothed) %>% 
-  mutate(date = ymd(date))
+my_location <- "United States"
+
+clean <- covid %>% 
+filter(location == my_location) %>% 
+select(date, new_cases_smoothed, new_deaths_smoothed, new_vaccinations_smoothed, new_cases_smoothed_per_million) %>% 
+mutate(date = ymd(date))
 
 fit <- auto.arima(clean[,c("new_cases_smoothed")])
-fit
+fit2 <- auto.arima(clean[,c("new_deaths_smoothed")])
+fit3 <- auto.arima(clean[,c("new_vaccinations_smoothed")])
+fit4 <- auto.arima(clean[,c("new_cases_smoothed_per_million")])
+
+summary(fit)
+summary(fit2)
+summary(fit3)
+summary(fit4)
+
 
 forecastedValues <- forecast(fit, 30)
+forecastedValues2 <- forecast(fit2, 30)
+forecastedValues3 <- forecast(fit3, 30)
+forecastedValues4 <- forecast(fit4, 30)
 
 print(forecastedValues)
+print(forecastedValues2)
+print(forecastedValues3)
+print(forecastedValues4)
 
 clean$date[length(clean$date)]
 
@@ -655,8 +675,24 @@ forecast <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days
            Lo95 = forecastedValues$lower[,2],
            Hi95 = forecastedValues$upper[,2])
 
+forecast2 <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30), 
+           pred = forecastedValues2$mean, 
+           Lo95 = forecastedValues2$lower[,2],
+           Hi95 = forecastedValues2$upper[,2])
+
+forecast3 <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30), 
+           pred = forecastedValues3$mean, 
+           Lo95 = forecastedValues3$lower[,2],
+           Hi95 = forecastedValues3$upper[,2])
+
+forecast4 <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30), 
+           pred = forecastedValues4$mean, 
+           Lo95 = forecastedValues4$lower[,2],
+           Hi95 = forecastedValues4$upper[,2])
+
 #plot(forecastedValues)
 
+#cases forecast
 clean %>%
   ggplot() +
   geom_line(aes(y = new_cases_smoothed, x = date), colour = "black") +
@@ -664,40 +700,86 @@ clean %>%
   geom_line(data = forecast, aes(x = date, y = pred), linetype = 2, colour = "red") + 
   theme_minimal() + 
   scale_y_continuous(labels = comma) +
-  labs(title = "United States 30 Day Forecast of New Cases", x = "", y = "")
+  labs(title = paste(my_location, "30 Day Forecast of New Cases"), x = "", y = "")
 
+#cases per million
+clean %>%
+  ggplot() +
+  geom_line(aes(y = new_cases_smoothed_per_million, x = date), colour = "black") +
+  geom_ribbon(data = forecast4, aes(x = date, ymin = Lo95, ymax = Hi95), fill = "gray", alpha = 0.5) +
+  geom_line(data = forecast4, aes(x = date, y = pred), linetype = 2, colour = "red") + 
+  theme_minimal() + 
+  scale_y_continuous(labels = comma) +
+  labs(title = paste(my_location, "30 Day Forecast of New Cases Per Million"), x = "", y = "")
+
+#Deaths forecast
+clean %>%
+  ggplot() +
+  geom_line(aes(y = new_deaths_smoothed, x = date), colour = "black") +
+  geom_ribbon(data = forecast2, aes(x = date, ymin = Lo95, ymax = Hi95), fill = "gray", alpha = 0.5) +
+  geom_line(data = forecast2, aes(x = date, y = pred), linetype = 2, colour = "red") + 
+  theme_minimal() + 
+  scale_y_continuous(labels = comma) +
+  labs(title = paste(my_location, "30 Day Forecast of New Deaths"), x = "", y = "")
+
+#Vaccines forecast
+clean %>%
+  ggplot() +
+  geom_line(aes(y = new_vaccinations_smoothed, x = date), colour = "black") +
+  geom_ribbon(data = forecast3, aes(x = date, ymin = Lo95, ymax = Hi95), fill = "gray", alpha = 0.5) +
+  geom_line(data = forecast3, aes(x = date, y = pred), linetype = 2, colour = "red") + 
+  theme_minimal() + 
+  scale_y_continuous(labels = comma) +
+  labs(title = paste(my_location, "30 Day Forecast of New Vaccinations"), x = "", y = "")
+```
+
+```{r}
+#Cases vs Prevalent Variant
 ggplot(data = us, aes(x = date)) + 
   geom_area(aes(y = perc_sequences, color = variant, fill = variant), show.legend =FALSE, alpha = 0.5, position = "dodge") + 
   geom_line(aes(y = new_cases_smoothed_per_million / 40)) + 
   scale_y_continuous("Percent of Sequences", sec.axis=sec_axis(~.*40, name = "New Cases Per Million")) + 
   theme_minimal() + 
-  labs(title = "Proportion of Covid Variants vs New Cases Per Million")  +
+  labs(title = paste(my_location, "- Proportion of Covid Variants vs New Cases Per Million"))  +
   annotate(geom="label", x=ymd(20210501), y=50, label="Alpha") +
   annotate(geom="label", x=ymd(20210901), y=75, label="Delta") +
   annotate(geom="label", x=ymd(20220215), y=75, label="Omicron")
 ```
 
-```{r}
-us %>% 
-  select(date, variant, perc_sequences) %>% 
-  arrange(desc(date)) %>% 
-  na.omit()
-```
 
 
 ```{r}
 #Austria
-clean <- joined_clusters %>% 
-  filter(location == "Austria") %>% 
-  select(date, new_cases_smoothed) %>% 
-  mutate(date = ymd(date))
+my_location <- "Austria"
+
+clean <- covid %>% 
+filter(location == my_location) %>% 
+select(date, new_cases_smoothed, new_deaths_smoothed, new_vaccinations_smoothed, new_cases_smoothed_per_million) %>% 
+mutate(date = ymd(date))
 
 fit <- auto.arima(clean[,c("new_cases_smoothed")])
-fit
+fit2 <- auto.arima(clean[,c("new_deaths_smoothed")])
+fit3 <- auto.arima(clean[,c("new_vaccinations_smoothed")])
+fit4 <- auto.arima(clean[,c("new_cases_smoothed_per_million")])
+
+summary(fit)
+print("============================================")
+summary(fit2)
+print("============================================")
+summary(fit3)
+print("============================================")
+summary(fit4)
+
 
 forecastedValues <- forecast(fit, 30)
+forecastedValues2 <- forecast(fit2, 30)
+forecastedValues3 <- forecast(fit3, 30)
+forecastedValues4 <- forecast(fit4, 30)
 
 print(forecastedValues)
+print(forecastedValues2)
+print(forecastedValues3)
+print(forecastedValues4)
 
 clean$date[length(clean$date)]
 
@@ -711,8 +793,24 @@ forecast <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days
            Lo95 = forecastedValues$lower[,2],
            Hi95 = forecastedValues$upper[,2])
 
+forecast2 <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30), 
+           pred = forecastedValues2$mean, 
+           Lo95 = forecastedValues2$lower[,2],
+           Hi95 = forecastedValues2$upper[,2])
+
+forecast3 <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30), 
+           pred = forecastedValues3$mean, 
+           Lo95 = forecastedValues3$lower[,2],
+           Hi95 = forecastedValues3$upper[,2])
+
+forecast4 <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30), 
+           pred = forecastedValues4$mean, 
+           Lo95 = forecastedValues4$lower[,2],
+           Hi95 = forecastedValues4$upper[,2])
+
 #plot(forecastedValues)
 
+#cases forecast
 clean %>%
   ggplot() +
   geom_line(aes(y = new_cases_smoothed, x = date), colour = "black") +
@@ -720,34 +818,71 @@ clean %>%
   geom_line(data = forecast, aes(x = date, y = pred), linetype = 2, colour = "red") + 
   theme_minimal() + 
   scale_y_continuous(labels = comma) +
-  labs(title = "Austria 30 Day Forecast of New Cases", x = "", y = "")
+  labs(title = paste(my_location, "30 Day Forecast of New Cases"), x = "", y = "")
 
-ggplot(data = austria, aes(x = date)) + 
-  geom_area(aes(y = perc_sequences, color = variant, fill = variant), show.legend =FALSE, alpha = 0.5, position = "dodge") + 
-  geom_line(aes(y = new_cases_smoothed_per_million/ 60)) + 
-  scale_y_continuous("Percent of Sequences", sec.axis=sec_axis(~.*60, name = "New Cases Per Million")) + 
+#cases per million
+clean %>%
+  ggplot() +
+  geom_line(aes(y = new_cases_smoothed_per_million, x = date), colour = "black") +
+  geom_ribbon(data = forecast4, aes(x = date, ymin = Lo95, ymax = Hi95), fill = "gray", alpha = 0.5) +
+  geom_line(data = forecast4, aes(x = date, y = pred), linetype = 2, colour = "red") + 
   theme_minimal() + 
-  labs(title = "Proportion of Covid Variants vs New Cases Per Million")  +
-  annotate(geom="label", x=ymd(20210301), y=25, label="Alpha") +
-  annotate(geom="label", x=ymd(20210901), y=75, label="Delta") +
-  annotate(geom="label", x=ymd(20220115), y=75, label="Omicron") +
-  annotate(geom="label", x=ymd(20220401), y=90, label="Other")
+  scale_y_continuous(labels = comma) +
+  labs(title = paste(my_location, "30 Day Forecast of New Cases Per Million"), x = "", y = "")
 
+#Deaths forecast
+clean %>%
+  ggplot() +
+  geom_line(aes(y = new_deaths_smoothed, x = date), colour = "black") +
+  geom_ribbon(data = forecast2, aes(x = date, ymin = Lo95, ymax = Hi95), fill = "gray", alpha = 0.5) +
+  geom_line(data = forecast2, aes(x = date, y = pred), linetype = 2, colour = "red") + 
+  theme_minimal() + 
+  scale_y_continuous(labels = comma) +
+  labs(title = paste(my_location, "30 Day Forecast of New Deaths"), x = "", y = "")
+
+#Vaccines forecast
+clean %>%
+  ggplot() +
+  geom_line(aes(y = new_vaccinations_smoothed, x = date), colour = "black") +
+  geom_ribbon(data = forecast3, aes(x = date, ymin = Lo95, ymax = Hi95), fill = "gray", alpha = 0.5) +
+  geom_line(data = forecast3, aes(x = date, y = pred), linetype = 2, colour = "red") + 
+  theme_minimal() + 
+  scale_y_continuous(labels = comma) +
+  labs(title = paste(my_location, "30 Day Forecast of New Vaccinations"), x = "", y = "")
 ```
 
 ```{r}
 #India
-clean <- joined_clusters %>% 
-  filter(location == "India") %>% 
-  select(date, new_cases_smoothed) %>% 
-  mutate(date = ymd(date))
+my_location <- "India"
+
+clean <- covid %>% 
+filter(location == my_location) %>% 
+select(date, new_cases_smoothed, new_deaths_smoothed, new_vaccinations_smoothed, new_cases_smoothed_per_million) %>% 
+mutate(date = ymd(date))
 
 fit <- auto.arima(clean[,c("new_cases_smoothed")])
-fit
+fit2 <- auto.arima(clean[,c("new_deaths_smoothed")])
+fit3 <- auto.arima(clean[,c("new_vaccinations_smoothed")])
+fit4 <- auto.arima(clean[,c("new_cases_smoothed_per_million")])
+
+summary(fit)
+print("============================================")
+summary(fit2)
+print("============================================")
+summary(fit3)
+print("============================================")
+summary(fit4)
+
 
 forecastedValues <- forecast(fit, 30)
+forecastedValues2 <- forecast(fit2, 30)
+forecastedValues3 <- forecast(fit3, 30)
+forecastedValues4 <- forecast(fit4, 30)
 
 print(forecastedValues)
+print(forecastedValues2)
+print(forecastedValues3)
+print(forecastedValues4)
 
 clean$date[length(clean$date)]
 
@@ -761,8 +896,24 @@ forecast <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days
            Lo95 = forecastedValues$lower[,2],
            Hi95 = forecastedValues$upper[,2])
 
+forecast2 <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30), 
+           pred = forecastedValues2$mean, 
+           Lo95 = forecastedValues2$lower[,2],
+           Hi95 = forecastedValues2$upper[,2])
+
+forecast3 <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30), 
+           pred = forecastedValues3$mean, 
+           Lo95 = forecastedValues3$lower[,2],
+           Hi95 = forecastedValues3$upper[,2])
+
+forecast4 <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30), 
+           pred = forecastedValues4$mean, 
+           Lo95 = forecastedValues4$lower[,2],
+           Hi95 = forecastedValues4$upper[,2])
+
 #plot(forecastedValues)
 
+#cases forecast
 clean %>%
   ggplot() +
   geom_line(aes(y = new_cases_smoothed, x = date), colour = "black") +
@@ -770,22 +921,71 @@ clean %>%
   geom_line(data = forecast, aes(x = date, y = pred), linetype = 2, colour = "red") + 
   theme_minimal() + 
   scale_y_continuous(labels = comma) +
-  labs(title = "India 30 Day Forecast of New Cases", x = "", y = "")
+  labs(title = paste(my_location, "30 Day Forecast of New Cases"), x = "", y = "")
+
+#cases per million
+clean %>%
+  ggplot() +
+  geom_line(aes(y = new_cases_smoothed_per_million, x = date), colour = "black") +
+  geom_ribbon(data = forecast4, aes(x = date, ymin = Lo95, ymax = Hi95), fill = "gray", alpha = 0.5) +
+  geom_line(data = forecast4, aes(x = date, y = pred), linetype = 2, colour = "red") + 
+  theme_minimal() + 
+  scale_y_continuous(labels = comma) +
+  labs(title = paste(my_location, "30 Day Forecast of New Cases Per Million"), x = "", y = "")
+
+#Deaths forecast
+clean %>%
+  ggplot() +
+  geom_line(aes(y = new_deaths_smoothed, x = date), colour = "black") +
+  geom_ribbon(data = forecast2, aes(x = date, ymin = Lo95, ymax = Hi95), fill = "gray", alpha = 0.5) +
+  geom_line(data = forecast2, aes(x = date, y = pred), linetype = 2, colour = "red") + 
+  theme_minimal() + 
+  scale_y_continuous(labels = comma) +
+  labs(title = paste(my_location, "30 Day Forecast of New Deaths"), x = "", y = "")
+
+#Vaccines forecast
+clean %>%
+  ggplot() +
+  geom_line(aes(y = new_vaccinations_smoothed, x = date), colour = "black") +
+  geom_ribbon(data = forecast3, aes(x = date, ymin = Lo95, ymax = Hi95), fill = "gray", alpha = 0.5) +
+  geom_line(data = forecast3, aes(x = date, y = pred), linetype = 2, colour = "red") + 
+  theme_minimal() + 
+  scale_y_continuous(labels = comma) +
+  labs(title = paste(my_location, "30 Day Forecast of New Vaccinations"), x = "", y = "")
 ```
 
 ```{r}
 #France
-clean <- joined_clusters %>% 
-  filter(location == "France") %>% 
-  select(date, new_cases_smoothed) %>% 
-  mutate(date = ymd(date))
+my_location <- "France"
+
+clean <- covid %>% 
+filter(location == my_location) %>% 
+select(date, new_cases_smoothed, new_deaths_smoothed, new_vaccinations_smoothed, new_cases_smoothed_per_million) %>% 
+mutate(date = ymd(date))
 
 fit <- auto.arima(clean[,c("new_cases_smoothed")])
-fit
+fit2 <- auto.arima(clean[,c("new_deaths_smoothed")])
+fit3 <- auto.arima(clean[,c("new_vaccinations_smoothed")])
+fit4 <- auto.arima(clean[,c("new_cases_smoothed_per_million")])
+
+summary(fit)
+print("============================================")
+summary(fit2)
+print("============================================")
+summary(fit3)
+print("============================================")
+summary(fit4)
+
 
 forecastedValues <- forecast(fit, 30)
+forecastedValues2 <- forecast(fit2, 30)
+forecastedValues3 <- forecast(fit3, 30)
+forecastedValues4 <- forecast(fit4, 30)
 
 print(forecastedValues)
+print(forecastedValues2)
+print(forecastedValues3)
+print(forecastedValues4)
 
 clean$date[length(clean$date)]
 
@@ -799,8 +999,24 @@ forecast <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days
            Lo95 = forecastedValues$lower[,2],
            Hi95 = forecastedValues$upper[,2])
 
+forecast2 <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30), 
+           pred = forecastedValues2$mean, 
+           Lo95 = forecastedValues2$lower[,2],
+           Hi95 = forecastedValues2$upper[,2])
+
+forecast3 <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30), 
+           pred = forecastedValues3$mean, 
+           Lo95 = forecastedValues3$lower[,2],
+           Hi95 = forecastedValues3$upper[,2])
+
+forecast4 <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30), 
+           pred = forecastedValues4$mean, 
+           Lo95 = forecastedValues4$lower[,2],
+           Hi95 = forecastedValues4$upper[,2])
+
 #plot(forecastedValues)
 
+#cases forecast
 clean %>%
   ggplot() +
   geom_line(aes(y = new_cases_smoothed, x = date), colour = "black") +
@@ -808,17 +1024,37 @@ clean %>%
   geom_line(data = forecast, aes(x = date, y = pred), linetype = 2, colour = "red") + 
   theme_minimal() + 
   scale_y_continuous(labels = comma) +
-  labs(title = "France 30 Day Forecast of New Cases", x = "", y = "")
+  labs(title = paste(my_location, "30 Day Forecast of New Cases"), x = "", y = "")
 
-ggplot(data = france, aes(x = date)) + 
-  geom_area(aes(y = perc_sequences, color = variant, fill = variant), show.legend =FALSE, alpha = 0.5, position = "dodge") + 
-  geom_line(aes(y = new_cases_smoothed_per_million/ 60)) + 
-  scale_y_continuous("Percent of Sequences", sec.axis=sec_axis(~.*60, name = "New Cases Per Million")) + 
+#cases per million
+clean %>%
+  ggplot() +
+  geom_line(aes(y = new_cases_smoothed_per_million, x = date), colour = "black") +
+  geom_ribbon(data = forecast4, aes(x = date, ymin = Lo95, ymax = Hi95), fill = "gray", alpha = 0.5) +
+  geom_line(data = forecast4, aes(x = date, y = pred), linetype = 2, colour = "red") + 
   theme_minimal() + 
-  labs(title = "Proportion of Covid Variants vs New Cases Per Million")  +
-  annotate(geom="label", x=ymd(20210501), y=50, label="Alpha") +
-  annotate(geom="label", x=ymd(20210901), y=75, label="Delta") +
-  annotate(geom="label", x=ymd(20220215), y=75, label="Omicron")
+  scale_y_continuous(labels = comma) +
+  labs(title = paste(my_location, "30 Day Forecast of New Cases Per Million"), x = "", y = "")
+
+#Deaths forecast
+clean %>%
+  ggplot() +
+  geom_line(aes(y = new_deaths_smoothed, x = date), colour = "black") +
+  geom_ribbon(data = forecast2, aes(x = date, ymin = Lo95, ymax = Hi95), fill = "gray", alpha = 0.5) +
+  geom_line(data = forecast2, aes(x = date, y = pred), linetype = 2, colour = "red") + 
+  theme_minimal() + 
+  scale_y_continuous(labels = comma) +
+  labs(title = paste(my_location, "30 Day Forecast of New Deaths"), x = "", y = "")
+
+#Vaccines forecast
+clean %>%
+  ggplot() +
+  geom_line(aes(y = new_vaccinations_smoothed, x = date), colour = "black") +
+  geom_ribbon(data = forecast3, aes(x = date, ymin = Lo95, ymax = Hi95), fill = "gray", alpha = 0.5) +
+  geom_line(data = forecast3, aes(x = date, y = pred), linetype = 2, colour = "red") + 
+  theme_minimal() + 
+  scale_y_continuous(labels = comma) +
+  labs(title = paste(my_location, "30 Day Forecast of New Vaccinations"), x = "", y = "")
 ```
 
 ```{r}
@@ -831,17 +1067,36 @@ france %>%
 
 ```{r}
 #Germany
-clean <- joined_clusters %>% 
-  filter(location == "Germany") %>% 
-  select(date, new_cases_smoothed) %>% 
-  mutate(date = ymd(date))
+my_location <- "Germany"
+
+clean <- covid %>% 
+filter(location == my_location) %>% 
+select(date, new_cases_smoothed, new_deaths_smoothed, new_vaccinations_smoothed, new_cases_smoothed_per_million) %>% 
+mutate(date = ymd(date))
 
 fit <- auto.arima(clean[,c("new_cases_smoothed")])
-fit
+fit2 <- auto.arima(clean[,c("new_deaths_smoothed")])
+fit3 <- auto.arima(clean[,c("new_vaccinations_smoothed")])
+fit4 <- auto.arima(clean[,c("new_cases_smoothed_per_million")])
+
+summary(fit)
+print("============================================")
+summary(fit2)
+print("============================================")
+summary(fit3)
+print("============================================")
+summary(fit4)
+
 
 forecastedValues <- forecast(fit, 30)
+forecastedValues2 <- forecast(fit2, 30)
+forecastedValues3 <- forecast(fit3, 30)
+forecastedValues4 <- forecast(fit4, 30)
 
 print(forecastedValues)
+print(forecastedValues2)
+print(forecastedValues3)
+print(forecastedValues4)
 
 clean$date[length(clean$date)]
 
@@ -855,8 +1110,24 @@ forecast <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days
            Lo95 = forecastedValues$lower[,2],
            Hi95 = forecastedValues$upper[,2])
 
+forecast2 <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30), 
+           pred = forecastedValues2$mean, 
+           Lo95 = forecastedValues2$lower[,2],
+           Hi95 = forecastedValues2$upper[,2])
+
+forecast3 <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30), 
+           pred = forecastedValues3$mean, 
+           Lo95 = forecastedValues3$lower[,2],
+           Hi95 = forecastedValues3$upper[,2])
+
+forecast4 <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30), 
+           pred = forecastedValues4$mean, 
+           Lo95 = forecastedValues4$lower[,2],
+           Hi95 = forecastedValues4$upper[,2])
+
 #plot(forecastedValues)
 
+#cases forecast
 clean %>%
   ggplot() +
   geom_line(aes(y = new_cases_smoothed, x = date), colour = "black") +
@@ -864,17 +1135,37 @@ clean %>%
   geom_line(data = forecast, aes(x = date, y = pred), linetype = 2, colour = "red") + 
   theme_minimal() + 
   scale_y_continuous(labels = comma) +
-  labs(title = "Germany 30 Day Forecast of New Cases", x = "", y = "")
+  labs(title = paste(my_location, "30 Day Forecast of New Cases"), x = "", y = "")
 
-ggplot(data = germany, aes(x = date)) + 
-  geom_area(aes(y = perc_sequences, color = variant, fill = variant), show.legend =FALSE, alpha = 0.5, position = "dodge") + 
-  geom_line(aes(y = new_cases_smoothed_per_million/ 50)) + 
-  scale_y_continuous("Percent of Sequences", sec.axis=sec_axis(~.*50, name = "New Cases Per Million")) + 
+#cases per million
+clean %>%
+  ggplot() +
+  geom_line(aes(y = new_cases_smoothed_per_million, x = date), colour = "black") +
+  geom_ribbon(data = forecast4, aes(x = date, ymin = Lo95, ymax = Hi95), fill = "gray", alpha = 0.5) +
+  geom_line(data = forecast4, aes(x = date, y = pred), linetype = 2, colour = "red") + 
   theme_minimal() + 
-  labs(title = "Proportion of Covid Variants vs New Cases Per Million")  +
-  annotate(geom="label", x=ymd(20210501), y=75, label="Alpha") +
-  annotate(geom="label", x=ymd(20210901), y=75, label="Delta") +
-  annotate(geom="label", x=ymd(20220215), y=75, label="Omicron")
+  scale_y_continuous(labels = comma) +
+  labs(title = paste(my_location, "30 Day Forecast of New Cases Per Million"), x = "", y = "")
+
+#Deaths forecast
+clean %>%
+  ggplot() +
+  geom_line(aes(y = new_deaths_smoothed, x = date), colour = "black") +
+  geom_ribbon(data = forecast2, aes(x = date, ymin = Lo95, ymax = Hi95), fill = "gray", alpha = 0.5) +
+  geom_line(data = forecast2, aes(x = date, y = pred), linetype = 2, colour = "red") + 
+  theme_minimal() + 
+  scale_y_continuous(labels = comma) +
+  labs(title = paste(my_location, "30 Day Forecast of New Deaths"), x = "", y = "")
+
+#Vaccines forecast
+clean %>%
+  ggplot() +
+  geom_line(aes(y = new_vaccinations_smoothed, x = date), colour = "black") +
+  geom_ribbon(data = forecast3, aes(x = date, ymin = Lo95, ymax = Hi95), fill = "gray", alpha = 0.5) +
+  geom_line(data = forecast3, aes(x = date, y = pred), linetype = 2, colour = "red") + 
+  theme_minimal() + 
+  scale_y_continuous(labels = comma) +
+  labs(title = paste(my_location, "30 Day Forecast of New Vaccinations"), x = "", y = "")
 ```
 
 ```{r}
@@ -887,17 +1178,36 @@ germany %>%
 
 ```{r}
 #Italy
-clean <- joined_clusters %>% 
-  filter(location == "Italy") %>% 
-  select(date, new_cases_smoothed) %>% 
-  mutate(date = ymd(date))
+my_location <- "Italy"
+
+clean <- covid %>% 
+filter(location == my_location) %>% 
+select(date, new_cases_smoothed, new_deaths_smoothed, new_vaccinations_smoothed, new_cases_smoothed_per_million) %>% 
+mutate(date = ymd(date))
 
 fit <- auto.arima(clean[,c("new_cases_smoothed")])
-fit
+fit2 <- auto.arima(clean[,c("new_deaths_smoothed")])
+fit3 <- auto.arima(clean[,c("new_vaccinations_smoothed")])
+fit4 <- auto.arima(clean[,c("new_cases_smoothed_per_million")])
+
+summary(fit)
+print("============================================")
+summary(fit2)
+print("============================================")
+summary(fit3)
+print("============================================")
+summary(fit4)
+
 
 forecastedValues <- forecast(fit, 30)
+forecastedValues2 <- forecast(fit2, 30)
+forecastedValues3 <- forecast(fit3, 30)
+forecastedValues4 <- forecast(fit4, 30)
 
 print(forecastedValues)
+print(forecastedValues2)
+print(forecastedValues3)
+print(forecastedValues4)
 
 clean$date[length(clean$date)]
 
@@ -911,8 +1221,24 @@ forecast <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days
            Lo95 = forecastedValues$lower[,2],
            Hi95 = forecastedValues$upper[,2])
 
+forecast2 <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30), 
+           pred = forecastedValues2$mean, 
+           Lo95 = forecastedValues2$lower[,2],
+           Hi95 = forecastedValues2$upper[,2])
+
+forecast3 <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30), 
+           pred = forecastedValues3$mean, 
+           Lo95 = forecastedValues3$lower[,2],
+           Hi95 = forecastedValues3$upper[,2])
+
+forecast4 <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30), 
+           pred = forecastedValues4$mean, 
+           Lo95 = forecastedValues4$lower[,2],
+           Hi95 = forecastedValues4$upper[,2])
+
 #plot(forecastedValues)
 
+#cases forecast
 clean %>%
   ggplot() +
   geom_line(aes(y = new_cases_smoothed, x = date), colour = "black") +
@@ -920,22 +1246,71 @@ clean %>%
   geom_line(data = forecast, aes(x = date, y = pred), linetype = 2, colour = "red") + 
   theme_minimal() + 
   scale_y_continuous(labels = comma) +
-  labs(title = "Italy 30 Day Forecast of New Cases", x = "", y = "")
+  labs(title = paste(my_location, "30 Day Forecast of New Cases"), x = "", y = "")
+
+#cases per million
+clean %>%
+  ggplot() +
+  geom_line(aes(y = new_cases_smoothed_per_million, x = date), colour = "black") +
+  geom_ribbon(data = forecast4, aes(x = date, ymin = Lo95, ymax = Hi95), fill = "gray", alpha = 0.5) +
+  geom_line(data = forecast4, aes(x = date, y = pred), linetype = 2, colour = "red") + 
+  theme_minimal() + 
+  scale_y_continuous(labels = comma) +
+  labs(title = paste(my_location, "30 Day Forecast of New Cases Per Million"), x = "", y = "")
+
+#Deaths forecast
+clean %>%
+  ggplot() +
+  geom_line(aes(y = new_deaths_smoothed, x = date), colour = "black") +
+  geom_ribbon(data = forecast2, aes(x = date, ymin = Lo95, ymax = Hi95), fill = "gray", alpha = 0.5) +
+  geom_line(data = forecast2, aes(x = date, y = pred), linetype = 2, colour = "red") + 
+  theme_minimal() + 
+  scale_y_continuous(labels = comma) +
+  labs(title = paste(my_location, "30 Day Forecast of New Deaths"), x = "", y = "")
+
+#Vaccines forecast
+clean %>%
+  ggplot() +
+  geom_line(aes(y = new_vaccinations_smoothed, x = date), colour = "black") +
+  geom_ribbon(data = forecast3, aes(x = date, ymin = Lo95, ymax = Hi95), fill = "gray", alpha = 0.5) +
+  geom_line(data = forecast3, aes(x = date, y = pred), linetype = 2, colour = "red") + 
+  theme_minimal() + 
+  scale_y_continuous(labels = comma) +
+  labs(title = paste(my_location, "30 Day Forecast of New Vaccinations"), x = "", y = "")
 ```
 
 ```{r}
 #South Korea
-clean <- joined_clusters %>% 
-  filter(location == "South Korea") %>% 
-  select(date, new_cases_smoothed) %>% 
-  mutate(date = ymd(date))
+my_location <- "South Korea"
+
+clean <- covid %>% 
+filter(location == my_location) %>% 
+select(date, new_cases_smoothed, new_deaths_smoothed, new_vaccinations_smoothed, new_cases_smoothed_per_million) %>% 
+mutate(date = ymd(date))
 
 fit <- auto.arima(clean[,c("new_cases_smoothed")])
-fit
+fit2 <- auto.arima(clean[,c("new_deaths_smoothed")])
+fit3 <- auto.arima(clean[,c("new_vaccinations_smoothed")])
+fit4 <- auto.arima(clean[,c("new_cases_smoothed_per_million")])
+
+summary(fit)
+print("============================================")
+summary(fit2)
+print("============================================")
+summary(fit3)
+print("============================================")
+summary(fit4)
+
 
 forecastedValues <- forecast(fit, 30)
+forecastedValues2 <- forecast(fit2, 30)
+forecastedValues3 <- forecast(fit3, 30)
+forecastedValues4 <- forecast(fit4, 30)
 
 print(forecastedValues)
+print(forecastedValues2)
+print(forecastedValues3)
+print(forecastedValues4)
 
 clean$date[length(clean$date)]
 
@@ -949,8 +1324,24 @@ forecast <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days
            Lo95 = forecastedValues$lower[,2],
            Hi95 = forecastedValues$upper[,2])
 
+forecast2 <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30), 
+           pred = forecastedValues2$mean, 
+           Lo95 = forecastedValues2$lower[,2],
+           Hi95 = forecastedValues2$upper[,2])
+
+forecast3 <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30), 
+           pred = forecastedValues3$mean, 
+           Lo95 = forecastedValues3$lower[,2],
+           Hi95 = forecastedValues3$upper[,2])
+
+forecast4 <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30), 
+           pred = forecastedValues4$mean, 
+           Lo95 = forecastedValues4$lower[,2],
+           Hi95 = forecastedValues4$upper[,2])
+
 #plot(forecastedValues)
 
+#cases forecast
 clean %>%
   ggplot() +
   geom_line(aes(y = new_cases_smoothed, x = date), colour = "black") +
@@ -958,17 +1349,37 @@ clean %>%
   geom_line(data = forecast, aes(x = date, y = pred), linetype = 2, colour = "red") + 
   theme_minimal() + 
   scale_y_continuous(labels = comma) +
-  labs(title = "South Korea 30 Day Forecast of New Cases", x = "", y = "")
+  labs(title = paste(my_location, "30 Day Forecast of New Cases"), x = "", y = "")
 
-ggplot(data = skorea, aes(x = date)) + 
-  geom_area(aes(y = perc_sequences, color = variant, fill = variant), show.legend =FALSE, alpha = 0.5, position = "dodge") + 
-  geom_line(aes(y = new_cases_smoothed_per_million/ 80)) + 
-  scale_y_continuous("Percent of Sequences", sec.axis=sec_axis(~.*80, name = "New Cases Per Million")) + 
+#cases per million
+clean %>%
+  ggplot() +
+  geom_line(aes(y = new_cases_smoothed_per_million, x = date), colour = "black") +
+  geom_ribbon(data = forecast4, aes(x = date, ymin = Lo95, ymax = Hi95), fill = "gray", alpha = 0.5) +
+  geom_line(data = forecast4, aes(x = date, y = pred), linetype = 2, colour = "red") + 
   theme_minimal() + 
-  labs(title = "Proportion of Covid Variants vs New Cases Per Million")  +
-  #annotate(geom="label", x=ymd(20210501), y=75, label="Alpha") +
-  annotate(geom="label", x=ymd(20211001), y=75, label="Delta") +
-  annotate(geom="label", x=ymd(20220215), y=75, label="Omicron")
+  scale_y_continuous(labels = comma) +
+  labs(title = paste(my_location, "30 Day Forecast of New Cases Per Million"), x = "", y = "")
+
+#Deaths forecast
+clean %>%
+  ggplot() +
+  geom_line(aes(y = new_deaths_smoothed, x = date), colour = "black") +
+  geom_ribbon(data = forecast2, aes(x = date, ymin = Lo95, ymax = Hi95), fill = "gray", alpha = 0.5) +
+  geom_line(data = forecast2, aes(x = date, y = pred), linetype = 2, colour = "red") + 
+  theme_minimal() + 
+  scale_y_continuous(labels = comma) +
+  labs(title = paste(my_location, "30 Day Forecast of New Deaths"), x = "", y = "")
+
+#Vaccines forecast
+clean %>%
+  ggplot() +
+  geom_line(aes(y = new_vaccinations_smoothed, x = date), colour = "black") +
+  geom_ribbon(data = forecast3, aes(x = date, ymin = Lo95, ymax = Hi95), fill = "gray", alpha = 0.5) +
+  geom_line(data = forecast3, aes(x = date, y = pred), linetype = 2, colour = "red") + 
+  theme_minimal() + 
+  scale_y_continuous(labels = comma) +
+  labs(title = paste(my_location, "30 Day Forecast of New Vaccinations"), x = "", y = "")
 ```
 
 ```{r}
@@ -981,17 +1392,36 @@ skorea %>%
 
 ```{r}
 #Vietnam
-clean <- joined_clusters %>% 
-  filter(location == "Vietnam") %>% 
-  select(date, new_cases_smoothed) %>% 
-  mutate(date = ymd(date))
+my_location <- "Vietnam"
+
+clean <- covid %>% 
+filter(location == my_location) %>% 
+select(date, new_cases_smoothed, new_deaths_smoothed, new_vaccinations_smoothed, new_cases_smoothed_per_million) %>% 
+mutate(date = ymd(date))
 
 fit <- auto.arima(clean[,c("new_cases_smoothed")])
-fit
+fit2 <- auto.arima(clean[,c("new_deaths_smoothed")])
+fit3 <- auto.arima(clean[,c("new_vaccinations_smoothed")])
+fit4 <- auto.arima(clean[,c("new_cases_smoothed_per_million")])
+
+summary(fit)
+print("============================================")
+summary(fit2)
+print("============================================")
+summary(fit3)
+print("============================================")
+summary(fit4)
+
 
 forecastedValues <- forecast(fit, 30)
+forecastedValues2 <- forecast(fit2, 30)
+forecastedValues3 <- forecast(fit3, 30)
+forecastedValues4 <- forecast(fit4, 30)
 
 print(forecastedValues)
+print(forecastedValues2)
+print(forecastedValues3)
+print(forecastedValues4)
 
 clean$date[length(clean$date)]
 
@@ -1005,8 +1435,24 @@ forecast <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days
            Lo95 = forecastedValues$lower[,2],
            Hi95 = forecastedValues$upper[,2])
 
+forecast2 <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30), 
+           pred = forecastedValues2$mean, 
+           Lo95 = forecastedValues2$lower[,2],
+           Hi95 = forecastedValues2$upper[,2])
+
+forecast3 <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30), 
+           pred = forecastedValues3$mean, 
+           Lo95 = forecastedValues3$lower[,2],
+           Hi95 = forecastedValues3$upper[,2])
+
+forecast4 <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30), 
+           pred = forecastedValues4$mean, 
+           Lo95 = forecastedValues4$lower[,2],
+           Hi95 = forecastedValues4$upper[,2])
+
 #plot(forecastedValues)
 
+#cases forecast
 clean %>%
   ggplot() +
   geom_line(aes(y = new_cases_smoothed, x = date), colour = "black") +
@@ -1014,22 +1460,71 @@ clean %>%
   geom_line(data = forecast, aes(x = date, y = pred), linetype = 2, colour = "red") + 
   theme_minimal() + 
   scale_y_continuous(labels = comma) +
-  labs(title = "Vietnam 30 Day Forecast of New Cases", x = "", y = "")
+  labs(title = paste(my_location, "30 Day Forecast of New Cases"), x = "", y = "")
+
+#cases per million
+clean %>%
+  ggplot() +
+  geom_line(aes(y = new_cases_smoothed_per_million, x = date), colour = "black") +
+  geom_ribbon(data = forecast4, aes(x = date, ymin = Lo95, ymax = Hi95), fill = "gray", alpha = 0.5) +
+  geom_line(data = forecast4, aes(x = date, y = pred), linetype = 2, colour = "red") + 
+  theme_minimal() + 
+  scale_y_continuous(labels = comma) +
+  labs(title = paste(my_location, "30 Day Forecast of New Cases Per Million"), x = "", y = "")
+
+#Deaths forecast
+clean %>%
+  ggplot() +
+  geom_line(aes(y = new_deaths_smoothed, x = date), colour = "black") +
+  geom_ribbon(data = forecast2, aes(x = date, ymin = Lo95, ymax = Hi95), fill = "gray", alpha = 0.5) +
+  geom_line(data = forecast2, aes(x = date, y = pred), linetype = 2, colour = "red") + 
+  theme_minimal() + 
+  scale_y_continuous(labels = comma) +
+  labs(title = paste(my_location, "30 Day Forecast of New Deaths"), x = "", y = "")
+
+#Vaccines forecast
+clean %>%
+  ggplot() +
+  geom_line(aes(y = new_vaccinations_smoothed, x = date), colour = "black") +
+  geom_ribbon(data = forecast3, aes(x = date, ymin = Lo95, ymax = Hi95), fill = "gray", alpha = 0.5) +
+  geom_line(data = forecast3, aes(x = date, y = pred), linetype = 2, colour = "red") + 
+  theme_minimal() + 
+  scale_y_continuous(labels = comma) +
+  labs(title = paste(my_location, "30 Day Forecast of New Vaccinations"), x = "", y = "")
 ```
 
 ```{r}
 #China
-clean <- joined_clusters %>% 
-  filter(location == "China") %>% 
-  select(date, new_cases_smoothed) %>% 
-  mutate(date = ymd(date))
+my_location <- "China"
+
+clean <- covid %>% 
+filter(location == my_location) %>% 
+select(date, new_cases_smoothed, new_deaths_smoothed, new_vaccinations_smoothed, new_cases_smoothed_per_million) %>% 
+mutate(date = ymd(date))
 
 fit <- auto.arima(clean[,c("new_cases_smoothed")])
-fit
+fit2 <- auto.arima(clean[,c("new_deaths_smoothed")])
+fit3 <- auto.arima(clean[,c("new_vaccinations_smoothed")])
+fit4 <- auto.arima(clean[,c("new_cases_smoothed_per_million")])
+
+summary(fit)
+print("============================================")
+summary(fit2)
+print("============================================")
+summary(fit3)
+print("============================================")
+summary(fit4)
+
 
 forecastedValues <- forecast(fit, 30)
+forecastedValues2 <- forecast(fit2, 30)
+forecastedValues3 <- forecast(fit3, 30)
+forecastedValues4 <- forecast(fit4, 30)
 
 print(forecastedValues)
+print(forecastedValues2)
+print(forecastedValues3)
+print(forecastedValues4)
 
 clean$date[length(clean$date)]
 
@@ -1043,8 +1538,24 @@ forecast <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days
            Lo95 = forecastedValues$lower[,2],
            Hi95 = forecastedValues$upper[,2])
 
+forecast2 <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30), 
+           pred = forecastedValues2$mean, 
+           Lo95 = forecastedValues2$lower[,2],
+           Hi95 = forecastedValues2$upper[,2])
+
+forecast3 <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30), 
+           pred = forecastedValues3$mean, 
+           Lo95 = forecastedValues3$lower[,2],
+           Hi95 = forecastedValues3$upper[,2])
+
+forecast4 <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30), 
+           pred = forecastedValues4$mean, 
+           Lo95 = forecastedValues4$lower[,2],
+           Hi95 = forecastedValues4$upper[,2])
+
 #plot(forecastedValues)
 
+#cases forecast
 clean %>%
   ggplot() +
   geom_line(aes(y = new_cases_smoothed, x = date), colour = "black") +
@@ -1052,17 +1563,37 @@ clean %>%
   geom_line(data = forecast, aes(x = date, y = pred), linetype = 2, colour = "red") + 
   theme_minimal() + 
   scale_y_continuous(labels = comma) +
-  labs(title = "China 30 Day Forecast of New Cases", x = "", y = "")
+  labs(title = paste(my_location, "30 Day Forecast of New Cases"), x = "", y = "")
 
-ggplot(data = china, aes(x = date)) + 
-  geom_area(aes(y = perc_sequences, color = variant, fill = variant), show.legend =FALSE, alpha = 0.5, position = "dodge") + 
-  geom_line(aes(y = new_cases_smoothed_per_million*4)) + 
-  scale_y_continuous("Percent of Sequences", sec.axis=sec_axis(~./4, name = "New Cases Per Million")) + 
+#cases per million
+clean %>%
+  ggplot() +
+  geom_line(aes(y = new_cases_smoothed_per_million, x = date), colour = "black") +
+  geom_ribbon(data = forecast4, aes(x = date, ymin = Lo95, ymax = Hi95), fill = "gray", alpha = 0.5) +
+  geom_line(data = forecast4, aes(x = date, y = pred), linetype = 2, colour = "red") + 
   theme_minimal() + 
-  labs(title = "Proportion of Covid Variants vs New Cases Per Million")  +
-  #annotate(geom="label", x=ymd(20210501), y=75, label="Alpha") +
-  annotate(geom="label", x=ymd(20211001), y=75, label="Delta") +
-  annotate(geom="label", x=ymd(20220215), y=75, label="Omicron")
+  scale_y_continuous(labels = comma) +
+  labs(title = paste(my_location, "30 Day Forecast of New Cases Per Million"), x = "", y = "")
+
+#Deaths forecast
+clean %>%
+  ggplot() +
+  geom_line(aes(y = new_deaths_smoothed, x = date), colour = "black") +
+  geom_ribbon(data = forecast2, aes(x = date, ymin = Lo95, ymax = Hi95), fill = "gray", alpha = 0.5) +
+  geom_line(data = forecast2, aes(x = date, y = pred), linetype = 2, colour = "red") + 
+  theme_minimal() + 
+  scale_y_continuous(labels = comma) +
+  labs(title = paste(my_location, "30 Day Forecast of New Deaths"), x = "", y = "")
+
+#Vaccines forecast
+clean %>%
+  ggplot() +
+  geom_line(aes(y = new_vaccinations_smoothed, x = date), colour = "black") +
+  geom_ribbon(data = forecast3, aes(x = date, ymin = Lo95, ymax = Hi95), fill = "gray", alpha = 0.5) +
+  geom_line(data = forecast3, aes(x = date, y = pred), linetype = 2, colour = "red") + 
+  theme_minimal() + 
+  scale_y_continuous(labels = comma) +
+  labs(title = paste(my_location, "30 Day Forecast of New Vaccinations"), x = "", y = "")
 ```
 
 ```{r}
@@ -1070,5 +1601,109 @@ china %>%
   select(date, variant, perc_sequences) %>% 
   arrange(desc(date)) %>% 
   na.omit()
+```
+
+```{r}
+#Thailand
+
+my_location <- "Thailand"
+
+clean <- covid %>% 
+filter(location == my_location) %>% 
+select(date, new_cases_smoothed, new_deaths_smoothed, new_vaccinations_smoothed, new_cases_smoothed_per_million) %>% 
+mutate(date = ymd(date))
+
+fit <- auto.arima(clean[,c("new_cases_smoothed")])
+fit2 <- auto.arima(clean[,c("new_deaths_smoothed")])
+fit3 <- auto.arima(clean[,c("new_vaccinations_smoothed")])
+fit4 <- auto.arima(clean[,c("new_cases_smoothed_per_million")])
+
+summary(fit)
+print("============================================")
+summary(fit2)
+print("============================================")
+summary(fit3)
+print("============================================")
+summary(fit4)
+
+
+forecastedValues <- forecast(fit, 30)
+forecastedValues2 <- forecast(fit2, 30)
+forecastedValues3 <- forecast(fit3, 30)
+forecastedValues4 <- forecast(fit4, 30)
+
+print(forecastedValues)
+print(forecastedValues2)
+print(forecastedValues3)
+print(forecastedValues4)
+
+clean$date[length(clean$date)]
+
+clean %>% 
+  mutate(num = seq(1,length(clean$date)))
+
+seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30)
+
+forecast <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30), 
+           pred = forecastedValues$mean, 
+           Lo95 = forecastedValues$lower[,2],
+           Hi95 = forecastedValues$upper[,2])
+
+forecast2 <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30), 
+           pred = forecastedValues2$mean, 
+           Lo95 = forecastedValues2$lower[,2],
+           Hi95 = forecastedValues2$upper[,2])
+
+forecast3 <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30), 
+           pred = forecastedValues3$mean, 
+           Lo95 = forecastedValues3$lower[,2],
+           Hi95 = forecastedValues3$upper[,2])
+
+forecast4 <- data.frame(date = seq(clean$date[length(clean$date)] + 1, by = "days", length.out = 30), 
+           pred = forecastedValues4$mean, 
+           Lo95 = forecastedValues4$lower[,2],
+           Hi95 = forecastedValues4$upper[,2])
+
+#plot(forecastedValues)
+
+#cases forecast
+clean %>%
+  ggplot() +
+  geom_line(aes(y = new_cases_smoothed, x = date), colour = "black") +
+  geom_ribbon(data = forecast, aes(x = date, ymin = Lo95, ymax = Hi95), fill = "gray", alpha = 0.5) +
+  geom_line(data = forecast, aes(x = date, y = pred), linetype = 2, colour = "red") + 
+  theme_minimal() + 
+  scale_y_continuous(labels = comma) +
+  labs(title = paste(my_location, "30 Day Forecast of New Cases"), x = "", y = "")
+
+#cases per million
+clean %>%
+  ggplot() +
+  geom_line(aes(y = new_cases_smoothed_per_million, x = date), colour = "black") +
+  geom_ribbon(data = forecast4, aes(x = date, ymin = Lo95, ymax = Hi95), fill = "gray", alpha = 0.5) +
+  geom_line(data = forecast4, aes(x = date, y = pred), linetype = 2, colour = "red") + 
+  theme_minimal() + 
+  scale_y_continuous(labels = comma) +
+  labs(title = paste(my_location, "30 Day Forecast of New Cases Per Million"), x = "", y = "")
+
+#Deaths forecast
+clean %>%
+  ggplot() +
+  geom_line(aes(y = new_deaths_smoothed, x = date), colour = "black") +
+  geom_ribbon(data = forecast2, aes(x = date, ymin = Lo95, ymax = Hi95), fill = "gray", alpha = 0.5) +
+  geom_line(data = forecast2, aes(x = date, y = pred), linetype = 2, colour = "red") + 
+  theme_minimal() + 
+  scale_y_continuous(labels = comma) +
+  labs(title = paste(my_location, "30 Day Forecast of New Deaths"), x = "", y = "")
+
+#Vaccines forecast
+clean %>%
+  ggplot() +
+  geom_line(aes(y = new_vaccinations_smoothed, x = date), colour = "black") +
+  geom_ribbon(data = forecast3, aes(x = date, ymin = Lo95, ymax = Hi95), fill = "gray", alpha = 0.5) +
+  geom_line(data = forecast3, aes(x = date, y = pred), linetype = 2, colour = "red") + 
+  theme_minimal() + 
+  scale_y_continuous(labels = comma) +
+  labs(title = paste(my_location, "30 Day Forecast of New Vaccinations"), x = "", y = "")
 ```
 
