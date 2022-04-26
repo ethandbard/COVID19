@@ -9,26 +9,28 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE)
 
 ```{r, echo = FALSE, message=FALSE, warning=FALSE, comment=FALSE}
 library(tidyverse)
-library(scales)
-library(plotly)
-library(DT)
-library(data.table)
-library(gtable)
-library(plotly)
 library(lubridate)
 library(vtable)
 library(rjson)
 library(timetk)
-library(Rssa)
+#library(Rssa)
 library(RColorBrewer)
 library(gghighlight)
 library(tseries)
 library(forecast)
 library(tsibble)
-#library(brotools)
+
 
 `%!in%` <- Negate(`%in%`)
 ```
+
+```{r}
+citation("tsibble")
+```
+```{r}
+
+```
+
 
 ```{r, echo = FALSE, warning=FALSE}
 covid <- read_csv("data/owid-covid-data.csv",show_col_types = FALSE)
@@ -60,11 +62,11 @@ covid_NAs <- covid %>%
 ```
 
 ```{r}
-st(covid)
+st(covid, out = "kable")
 ```
 
 ```{r}
-st(gisaid)
+st(gisaid, out = "kable")
 ```
 
 
